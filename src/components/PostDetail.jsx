@@ -171,15 +171,11 @@ function parseMarkdown(content) {
   flushTable(lines.length);
   
   return elements;
-}
-
-// Inline parser for **bold**, `code`, [links](url) and ![images](url)
+}// Inline parser for **bold**, `code`, [links](url) and ![images](url)
 function parseInlineMarkdown(text) {
   if (!text) return '';
   
   const tokens = [];
-  
-  // Updated regex: now includes ![image](url) pattern
   const regex = /(\*\*.*?\*\*|`.*?`|!\[.*?\]\(.*?\)|\[.*?\]\(.*?\))/g;
   let match;
   let lastIdx = 0;
@@ -196,51 +192,27 @@ function parseInlineMarkdown(text) {
     return text;
   }
   
-  let currentKey = 0;
-  matches.forEach((m) => {
-    // Add text before match
+  for (const m of matches) {
     if (m.index > lastIdx) {
       tokens.push(text.slice(lastIdx, m.index));
     }
     
-    const tokenText = m.text;
-    
-    // Image: ![alt](url)
-    if (tokenText.startsWith('![') && tokenText.includes('](')) {
-      const closeBracket = tokenText.indexOf(']');
-      const altText = tokenText.slice(2, closeBracket);
-      const imageUrl = tokenText.slice(closeBracket + 2, -1);
-      tokens.push(
-        <img 
-          key={currentKey++} 
-          src={imageUrl} 
-          alt={altText} 
-          style={{ maxWidth: '100%', borderRadius: '4px', margin: '0.8rem 0', display: 'block', border: '1px solid var(--border-color)' }} 
-        />
-      );
-    }
-    // Bold: **text**
-    else if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
-      tokens.push(<strong key={currentKey++}>{tokenText.slice(2, -2)}</strong>);
-    } 
-    // Inline code: `code`
-    else if (tokenText.startsWith('`') && tokenText.endsWith('`')) {
-      tokens.push(<code key={currentKey++}>{tokenText.slice(1, -1)}</code>);
-    } 
-    // Link: [text](url)
-    else if (tokenText.startsWith('[') && tokenText.includes('](')) {
-      const closeBracket = tokenText.indexOf(']');
-      const linkLabel = tokenText.slice(1, closeBracket);
-      const linkUrl = tokenText.slice(closeBracket + 2, -1);
-      tokens.push(
-        <a key={currentKey++} href={linkUrl} target="_blank" rel="noopener noreferrer">
-          {linkLabel}
-        </a>
-      );
+    if (m.text.startsWith('**')) {
+      tokens.push(<strong key={m.index}>{m.text.slice(2, -2)}</strong>);
+    } else if (m.text.startsWith('`')) {
+      tokens.push(<code key={m.index}>{m.text.slice(1, -1)}</code>);
+    } else if (m.text.startsWith('![')) {
+      const alt = m.text.slice(2, m.text.indexOf(']'));
+      const url = m.text.slice(m.text.indexOf('(') + 1, -1);
+      tokens.push(<img key={m.index} src={url} alt={alt} />);
+    } else if (m.text.startsWith('[')) {
+      const label = m.text.slice(1, m.text.indexOf(']'));
+      const url = m.text.slice(m.text.indexOf('(') + 1, -1);
+      tokens.push(<a key={m.index} href={url} target="_blank" rel="noopener noreferrer">{label}</a>);
     }
     
-    lastIdx = m.index + tokenText.length;
-  });
+    lastIdx = m.index + m.text.length;
+  }
   
   if (lastIdx < text.length) {
     tokens.push(text.slice(lastIdx));

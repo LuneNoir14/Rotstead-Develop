@@ -694,14 +694,21 @@ nav .button {
   }
 }
 
-/* Post content images - prevent overflow */
+/* Post content images - prevent overflow and excessive size */
 .post-content img {
-  max-width: 100%;
-  height: auto;
+  max-width: min(100%, 650px);
+  max-height: 450px;
+  object-fit: contain;
   display: block;
+  margin: 1.5rem auto;
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
-  margin: 0.8rem 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease-in-out;
+}
+
+.post-content img:hover {
+  transform: scale(1.01);
 }
 
 /* Footer styling */
