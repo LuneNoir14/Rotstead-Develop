@@ -104,11 +104,18 @@ export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmi
               <span>Hakkımda</span>
             </a>
           </li>
-          {isAdmin && (
+          {isAdmin ? (
             <li>
               <a href="#" className={`button small-button ${currentTab === 'editor' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('editor'); }}>
                 <PenLine size={16} />
                 <span>Yazı Ekle</span>
+              </a>
+            </li>
+          ) : (
+            <li>
+              <a href="#/admin" className={`button small-button ${currentTab === 'admin' ? 'active' : ''}`}>
+                <PenLine size={16} />
+                <span>Yönetici</span>
               </a>
             </li>
           )}

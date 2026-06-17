@@ -465,7 +465,7 @@ export default function AdminEditor({ onBack, editData }) {
   const todayDate = new Date().toISOString().split('T')[0];
 
   // Generated JSON entry for registry.json
-  const generatedJson = JSON.stringify({
+  const registryEntry = {
     id: slug,
     title: title || 'Başlıksız Makale',
     category: category,
@@ -474,7 +474,15 @@ export default function AdminEditor({ onBack, editData }) {
     image: image,
     excerpt: excerpt || 'Açıklama girilmedi.',
     file: `${slug}.md`
-  }, null, 2);
+  };
+  const generatedJson = JSON.stringify(registryEntry, null, 2);
+
+  // Truncated version for display (if cover image is base64, show short label)
+  const displayEntry = { ...registryEntry };
+  if (displayEntry.image && displayEntry.image.startsWith('data:image')) {
+    displayEntry.image = `[Yerel Görsel - ${Math.round(displayEntry.image.length / 1024)} KB] (Kopyalamada tam veri dahil edilecektir)`;
+  }
+  const displayJson = JSON.stringify(displayEntry, null, 2);
 
   const copyToClipboard = (text, setCopied) => {
     navigator.clipboard.writeText(text);
@@ -951,8 +959,8 @@ export default function AdminEditor({ onBack, editData }) {
                     <span>{copiedRegistry ? 'Kopyalandı!' : 'Kopyala'}</span>
                   </button>
                 </div>
-                <pre style={{ backgroundColor: 'var(--secondary-detail-color)', padding: '0.8rem', borderRadius: 'var(--border-radius)', overflowX: 'auto', fontSize: '0.85rem', border: '1px solid var(--border-color)' }}>
-                  <code>{generatedJson}</code>
+                <pre style={{ backgroundColor: 'var(--secondary-detail-color)', padding: '0.8rem', borderRadius: 'var(--border-radius)', overflowX: 'auto', fontSize: '0.85rem', border: '1px solid var(--border-color)', maxHeight: '16rem', overflow: 'auto' }}>
+                  <code>{displayJson}</code>
                 </pre>
               </div>
 
