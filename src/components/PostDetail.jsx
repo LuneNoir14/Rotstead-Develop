@@ -1,5 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, Clock, Tag, PenLine } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Tag, PenLine, Trash2 } from 'lucide-react';
+
+function uint8ArrayToBase64(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
 
 // A lightweight custom Markdown parser that outputs React elements
 function parseMarkdown(content) {
@@ -32,8 +41,6 @@ function parseMarkdown(content) {
 
   const flushTable = (key) => {
     if (tableRows.length > 0) {
-      // Find alignment or headers
-      // If row 1 is header, row 2 is separator (---)
       const hasHeader = tableRows.length > 1 && tableRows[1].some(cell => cell.startsWith(':--') || cell.startsWith('--') || cell.endsWith('--:'));
       
       let headers = [];
@@ -76,7 +83,6 @@ function parseMarkdown(content) {
     // Code block detection
     if (line.trim().startsWith('```')) {
       if (inCodeBlock) {
-        // End of code block
         elements.push(
           <pre key={`code-${i}`} className="glass-card">
             <code className={codeLang ? `language-${codeLang}` : ''}>
@@ -87,10 +93,8 @@ function parseMarkdown(content) {
         codeBlockLines = [];
         inCodeBlock = false;
       } else {
-        // Start of code block
         inCodeBlock = true;
         codeLang = line.trim().slice(3);
-        // Flush any active lists/tables before code block
         flushList(i);
         flushTable(i);
       }
@@ -104,7 +108,6 @@ function parseMarkdown(content) {
     
     // Table parsing
     if (line.trim().startsWith('|') && line.trim().endsWith('|')) {
-      // Flush lists
       flushList(i);
       inTable = true;
       const cells = line.split('|').slice(1, -1).map(c => c.trim());
@@ -170,15 +173,14 @@ function parseMarkdown(content) {
   return elements;
 }
 
-// Simple inline parser for **bold** and `code` and [links](url)
+// Inline parser for **bold**, `code`, [links](url) and ![images](url)
 function parseInlineMarkdown(text) {
   if (!text) return '';
   
   const tokens = [];
-  let remaining = text;
   
-  // Matches: **bold**, `inline code`, [link text](url)
-  const regex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\))/g;
+  // Updated regex: now includes ![image](url) pattern
+  const regex = /(\*\*.*?\*\*|`.*?`|!\[.*?\]\(.*?\)|\[.*?\]\(.*?\))/g;
   let match;
   let lastIdx = 0;
   
@@ -195,18 +197,38 @@ function parseInlineMarkdown(text) {
   }
   
   let currentKey = 0;
-  matches.forEach((m, idx) => {
+  matches.forEach((m) => {
     // Add text before match
     if (m.index > lastIdx) {
       tokens.push(text.slice(lastIdx, m.index));
     }
     
     const tokenText = m.text;
-    if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
+    
+    // Image: ![alt](url)
+    if (tokenText.startsWith('![') && tokenText.includes('](')) {
+      const closeBracket = tokenText.indexOf(']');
+      const altText = tokenText.slice(2, closeBracket);
+      const imageUrl = tokenText.slice(closeBracket + 2, -1);
+      tokens.push(
+        <img 
+          key={currentKey++} 
+          src={imageUrl} 
+          alt={altText} 
+          style={{ maxWidth: '100%', borderRadius: '4px', margin: '0.8rem 0', display: 'block', border: '1px solid var(--border-color)' }} 
+        />
+      );
+    }
+    // Bold: **text**
+    else if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
       tokens.push(<strong key={currentKey++}>{tokenText.slice(2, -2)}</strong>);
-    } else if (tokenText.startsWith('`') && tokenText.endsWith('`')) {
+    } 
+    // Inline code: `code`
+    else if (tokenText.startsWith('`') && tokenText.endsWith('`')) {
       tokens.push(<code key={currentKey++}>{tokenText.slice(1, -1)}</code>);
-    } else if (tokenText.startsWith('[') && tokenText.includes('](')) {
+    } 
+    // Link: [text](url)
+    else if (tokenText.startsWith('[') && tokenText.includes('](')) {
       const closeBracket = tokenText.indexOf(']');
       const linkLabel = tokenText.slice(1, closeBracket);
       const linkUrl = tokenText.slice(closeBracket + 2, -1);
@@ -227,9 +249,11 @@ function parseInlineMarkdown(text) {
   return tokens;
 }
 
-export default function PostDetail({ post, isAdmin, onBack, onEdit }) {
+export default function PostDetail({ post, isAdmin, onBack, onEdit, onDelete }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteStatus, setDeleteStatus] = useState('');
 
   useEffect(() => {
     if (post && post.file) {
@@ -250,6 +274,97 @@ export default function PostDetail({ post, isAdmin, onBack, onEdit }) {
         });
     }
   }, [post]);
+
+  // Delete post via GitHub API
+  const handleDeletePost = async () => {
+    if (!window.confirm(`"${post.title}" başlıklı yazıyı kalıcı olarak silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz!`)) {
+      return;
+    }
+
+    const token = localStorage.getItem('githubToken');
+    if (!token) {
+      alert("Yazıyı silmek için GitHub erişim anahtarınızın kayıtlı olması gerekir. Lütfen editör sayfasından anahtarınızı girin.");
+      return;
+    }
+
+    setIsDeleting(true);
+    setDeleteStatus("Silme işlemi başlatılıyor...");
+
+    const owner = "LuneNoir14";
+    const repo = "Rotstead-Develop";
+    const branch = "main";
+    const headers = {
+      "Authorization": `token ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    try {
+      // Step 1: Delete the .md file
+      setDeleteStatus(`${post.file} dosyası siliniyor...`);
+      const mdUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/${post.file}?ref=${branch}`;
+      const mdRes = await fetch(mdUrl, { headers });
+      
+      if (mdRes.ok) {
+        const mdData = await mdRes.json();
+        const deleteRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/public/posts/${post.file}`, {
+          method: "DELETE",
+          headers,
+          body: JSON.stringify({
+            message: `Delete post: ${post.title}`,
+            sha: mdData.sha,
+            branch,
+          })
+        });
+        if (!deleteRes.ok) throw new Error("Makale dosyası silinemedi.");
+      }
+
+      // Step 2: Update registry.json to remove the post
+      setDeleteStatus("Kütüphane güncelleniyor...");
+      const registryUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/registry.json?ref=${branch}`;
+      const regRes = await fetch(registryUrl, { headers });
+      if (!regRes.ok) throw new Error("Kütüphane dosyası indirilemedi.");
+      const regData = await regRes.json();
+
+      const decodedRegistryText = new TextDecoder("utf-8").decode(
+        Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
+      );
+      let registryArray = JSON.parse(decodedRegistryText);
+
+      // Remove the post from registry
+      registryArray = registryArray.filter(p => p.id !== post.id);
+
+      const updatedRegistryText = JSON.stringify(registryArray, null, 2);
+      const encoder = new TextEncoder();
+      const registryBytes = encoder.encode(updatedRegistryText);
+      const registryBase64 = uint8ArrayToBase64(registryBytes);
+
+      const regCommitRes = await fetch(registryUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          message: `Remove post from registry: ${post.title}`,
+          content: registryBase64,
+          sha: regData.sha,
+          branch,
+        })
+      });
+
+      if (!regCommitRes.ok) throw new Error("Kütüphane güncellenemedi.");
+
+      setDeleteStatus("Yazı başarıyla silindi!");
+      alert("Yazı başarıyla silindi! Siteniz Render'da güncellenmeye başlandı.");
+      
+      // Notify parent and navigate
+      if (onDelete) onDelete(post.id);
+
+    } catch (error) {
+      console.error(error);
+      alert(`Silme sırasında hata oluştu: ${error.message}`);
+      setDeleteStatus(`Hata: ${error.message}`);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (!post) return null;
 
@@ -290,12 +405,33 @@ export default function PostDetail({ post, isAdmin, onBack, onEdit }) {
         )}
       </div>
 
-      {!loading && isAdmin && onEdit && (
-        <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}>
-          <button className="button" onClick={() => onEdit(post, content)}>
-            <PenLine size={16} />
-            <span>Yazıyı Düzenle</span>
-          </button>
+      {/* Admin Actions: Edit & Delete */}
+      {!loading && isAdmin && (
+        <div style={{ 
+          marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', 
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' 
+        }}>
+          <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+            {onEdit && (
+              <button className="button" onClick={() => onEdit(post, content)}>
+                <PenLine size={16} />
+                <span>Yazıyı Düzenle</span>
+              </button>
+            )}
+            <button 
+              className="button delete-post-btn" 
+              onClick={handleDeletePost}
+              disabled={isDeleting}
+            >
+              <Trash2 size={16} />
+              <span>{isDeleting ? 'Siliniyor...' : 'Yazıyı Sil'}</span>
+            </button>
+          </div>
+          {deleteStatus && (
+            <span style={{ fontSize: '0.85rem', fontStyle: 'italic', color: 'var(--accent-color)' }}>
+              {deleteStatus}
+            </span>
+          )}
         </div>
       )}
     </article>

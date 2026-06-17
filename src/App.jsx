@@ -222,6 +222,11 @@ export default function App() {
               setEditingPostData({ ...post, content });
               window.location.hash = '#/editor';
             }}
+            onDelete={(postId) => {
+              setPosts(prev => prev.filter(p => p.id !== postId));
+              setSelectedPostId(null);
+              window.location.hash = '#/';
+            }}
           />
         ) : currentTab === 'about' ? (
           <About />

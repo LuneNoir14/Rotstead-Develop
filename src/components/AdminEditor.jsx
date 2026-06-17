@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { 
   PenTool, Eye, FileText, Check, Copy, 
   Bold, Italic, Heading2, Heading3, Code, Quote, Table, Image as ImageIcon, Link as LinkIcon, 
-  Download, Upload, ArrowLeft 
+  Download, Upload, ArrowLeft, X, Trash2, Plus
 } from 'lucide-react';
 
 // Custom Markdown parser wrapper just for previewing
@@ -197,11 +197,35 @@ function uint8ArrayToBase64(bytes) {
 }
 
 export default function AdminEditor({ onBack, editData }) {
+  // Process initial content to extract any existing base64 images into embedded state
+  const [initialProcessed] = useState(() => {
+    const rawContent = editData?.content || '';
+    if (!rawContent) return { content: '', images: [], nextId: 0 };
+    
+    const images = [];
+    let idx = 0;
+    const newContent = rawContent.replace(
+      /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g,
+      (fullMatch, alt, data) => {
+        const id = `img_${idx}`;
+        images.push({ id, name: alt || `Görsel ${idx + 1}`, data });
+        idx++;
+        return `![${alt}](embedded:${id})`;
+      }
+    );
+    
+    return { content: newContent, images, nextId: idx };
+  });
+
   const [title, setTitle] = useState(editData ? editData.title : '');
   const [category, setCategory] = useState(editData ? editData.category : 'Geliştirme Günlükleri');
   const [image, setImage] = useState(editData ? editData.image : 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400');
   const [excerpt, setExcerpt] = useState(editData ? editData.excerpt : '');
-  const [content, setContent] = useState(editData ? editData.content : '');
+  const [content, setContent] = useState(initialProcessed.content || (editData?.content || ''));
+  
+  // Embedded images management
+  const [embeddedImages, setEmbeddedImages] = useState(initialProcessed.images);
+  const imageIdCounter = useRef(initialProcessed.nextId);
   
   const [copiedRegistry, setCopiedRegistry] = useState(false);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
@@ -223,6 +247,27 @@ export default function AdminEditor({ onBack, editData }) {
   const [tokenInput, setTokenInput] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStatus, setPublishStatus] = useState('');
+
+  // --- Embedded Image Management ---
+  const addEmbeddedImage = (name, base64Data) => {
+    const id = `img_${imageIdCounter.current++}`;
+    setEmbeddedImages(prev => [...prev, { id, name, data: base64Data }]);
+    return id;
+  };
+  
+  const removeEmbeddedImage = (id) => {
+    setEmbeddedImages(prev => prev.filter(img => img.id !== id));
+    setContent(prev => prev.replace(new RegExp(`!\\[[^\\]]*\\]\\(embedded:${id}\\)`, 'g'), ''));
+  };
+  
+  const resolveEmbeddedImages = (text) => {
+    return text.replace(/!\[([^\]]*)\]\(embedded:(img_\d+)\)/g, (fullMatch, alt, id) => {
+      const img = embeddedImages.find(i => i.id === id);
+      if (img) return `![${alt}](${img.data})`;
+      return fullMatch;
+    });
+  };
+  // ---
 
   const handleSaveToken = () => {
     if (!tokenInput.trim()) return;
@@ -249,7 +294,8 @@ export default function AdminEditor({ onBack, editData }) {
           reader.onload = (event) => {
             const base64Url = event.target?.result;
             if (base64Url) {
-              insertFormatting(`![Pasted Image](${base64Url})`);
+              const id = addEmbeddedImage('Yapıştırılan Görsel', base64Url);
+              insertFormatting(`![Yapıştırılan Görsel](embedded:${id})`);
             }
           };
           reader.readAsDataURL(file);
@@ -269,7 +315,8 @@ export default function AdminEditor({ onBack, editData }) {
       reader.onload = (event) => {
         const base64Url = event.target?.result;
         if (base64Url) {
-          insertFormatting(`![${file.name}](${base64Url})`);
+          const id = addEmbeddedImage(file.name, base64Url);
+          insertFormatting(`![${file.name}](embedded:${id})`);
         }
       };
       reader.readAsDataURL(file);
@@ -298,6 +345,9 @@ export default function AdminEditor({ onBack, editData }) {
       "Authorization": `token ${token}`,
       "Content-Type": "application/json",
     };
+
+    // Resolve embedded images before publishing
+    const resolvedContent = resolveEmbeddedImages(content);
 
     try {
       setPublishStatus("Makale kütüphanesi (registry.json) indiriliyor...");
@@ -349,7 +399,7 @@ export default function AdminEditor({ onBack, editData }) {
         console.log("Markdown checking failed or file doesn't exist yet.");
       }
 
-      const mdBytes = encoder.encode(content);
+      const mdBytes = encoder.encode(resolvedContent);
       const mdBase64 = uint8ArrayToBase64(mdBytes);
 
       const mdCommitRes = await fetch(markdownUrl, {
@@ -455,7 +505,7 @@ export default function AdminEditor({ onBack, editData }) {
     }, 50);
   };
 
-  // Convert dragged local image to base64 data URL
+  // Convert dragged local image to embedded reference (no more raw base64 in textarea)
   const handleImageFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -464,11 +514,25 @@ export default function AdminEditor({ onBack, editData }) {
     reader.onload = (event) => {
       const base64Url = event.target?.result;
       if (base64Url) {
-        insertFormatting(`![${file.name}](${base64Url})`);
+        const id = addEmbeddedImage(file.name, base64Url);
+        insertFormatting(`![${file.name}](embedded:${id})`);
         setShowImagePanel(false);
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle cover image file selection
+  const handleCoverImageFile = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result;
+        if (base64Url) setImage(base64Url);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Add image via URL
@@ -481,16 +545,20 @@ export default function AdminEditor({ onBack, editData }) {
     setShowImagePanel(false);
   };
 
-  // Download .md file directly
+  // Download .md file with resolved images
   const downloadMarkdownFile = () => {
+    const resolvedContent = resolveEmbeddedImages(content);
     const element = document.createElement("a");
-    const file = new Blob([content], {type: 'text/markdown'});
+    const file = new Blob([resolvedContent], {type: 'text/markdown'});
     element.href = URL.createObjectURL(file);
     element.download = `${slug}.md`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
   };
+
+  // Check if cover image is base64
+  const isCoverBase64 = image && image.startsWith('data:image');
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--primary-spacing)', maxWidth: '70rem', margin: '0 auto', width: '100%' }}>
@@ -544,37 +612,78 @@ export default function AdminEditor({ onBack, editData }) {
                 </select>
               </div>
 
+              {/* Cover Image - with thumbnail preview for base64 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', gridColumn: 'span 2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label htmlFor="post-image" style={{ fontWeight: '600', fontSize: '0.95rem' }}>Kapak Resmi (Görsel URL veya Yerel Dosya)</label>
-                  <label className="button small-button" style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '0.8rem' }}>
-                    <span>Yerel Görsel Seç (Base64)</span>
-                    <input 
-                      type="file" 
-                      accept="image/*" 
-                      style={{ display: 'none' }} 
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const base64Url = event.target?.result;
-                            if (base64Url) setImage(base64Url);
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }}
+                <label style={{ fontWeight: '600', fontSize: '0.95rem' }}>Kapak Resmi</label>
+                
+                {isCoverBase64 ? (
+                  <div className="cover-image-preview">
+                    <img 
+                      src={image} 
+                      alt="Kapak Önizleme" 
+                      style={{ 
+                        width: '10rem', height: '6.5rem', objectFit: 'cover', 
+                        borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' 
+                      }} 
                     />
-                  </label>
-                </div>
-                <input 
-                  id="post-image"
-                  type="text" 
-                  className="search-input" 
-                  placeholder="https://images.unsplash.com/... veya yerel görsel seçin" 
-                  value={image}
-                  onChange={(e) => setImage(e.target.value)}
-                />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', justifyContent: 'center' }}>
+                      <span style={{ fontSize: '0.88rem', color: 'var(--secondary-color)', fontWeight: '500' }}>
+                        ✅ Yerel görsel yüklendi ({Math.round(image.length / 1024)} KB)
+                      </span>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <label className="button small-button" style={{ cursor: 'pointer' }}>
+                          <Upload size={12} />
+                          <span>Değiştir</span>
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            style={{ display: 'none' }} 
+                            onChange={handleCoverImageFile}
+                          />
+                        </label>
+                        <button className="button small-button" onClick={() => setImage('')} style={{ borderColor: 'var(--game-red)', color: 'var(--game-red)' }}>
+                          <X size={12} />
+                          <span>Kaldır</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                      <span style={{ fontSize: '0.85rem', color: 'var(--detail-color)' }}>Görsel URL veya yerel dosya seçin</span>
+                      <label className="button small-button" style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '0.8rem' }}>
+                        <Upload size={12} />
+                        <span>Yerel Görsel Seç</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          style={{ display: 'none' }} 
+                          onChange={handleCoverImageFile}
+                        />
+                      </label>
+                    </div>
+                    <input 
+                      id="post-image"
+                      type="text" 
+                      className="search-input" 
+                      placeholder="https://images.unsplash.com/..." 
+                      value={image}
+                      onChange={(e) => setImage(e.target.value)}
+                    />
+                    {image && !isCoverBase64 && (
+                      <img 
+                        src={image} 
+                        alt="Kapak Önizleme" 
+                        style={{ 
+                          marginTop: '0.5rem', width: '10rem', height: '6.5rem', objectFit: 'cover',
+                          borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' 
+                        }}
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', gridColumn: 'span 2' }}>
@@ -648,7 +757,7 @@ export default function AdminEditor({ onBack, editData }) {
                       Dosya Seç
                     </button>
                     <small style={{ fontSize: '0.75rem', marginTop: '0.4rem', color: 'var(--detail-color)' }}>
-                      Seçilen görsel otomatik olarak yazının içine gömülecektir.
+                      Görsel otomatik olarak yazıya gömülecektir.
                     </small>
                   </div>
 
@@ -685,6 +794,64 @@ export default function AdminEditor({ onBack, editData }) {
                   </form>
 
                 </div>
+
+                {/* Embedded Images Gallery */}
+                {embeddedImages.length > 0 && (
+                  <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem' }}>
+                    <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+                      <ImageIcon size={14} style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
+                      Gömülü Görseller ({embeddedImages.length})
+                    </h4>
+                    <div className="embedded-images-gallery">
+                      {embeddedImages.map((img) => (
+                        <div key={img.id} className="embedded-image-item">
+                          <img src={img.data} alt={img.name} />
+                          <span style={{ fontSize: '0.72rem', color: 'var(--detail-color)', textAlign: 'center', lineHeight: '1.2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                            {img.name}
+                          </span>
+                          <div className="embedded-image-actions">
+                            <button 
+                              type="button" 
+                              className="button small-button" 
+                              title="Yazıya referans ekle"
+                              onClick={() => insertFormatting(`![${img.name}](embedded:${img.id})`)}
+                            >
+                              <Plus size={10} />
+                            </button>
+                            <button 
+                              type="button" 
+                              className="button small-button delete-img-btn" 
+                              title="Görseli sil"
+                              onClick={() => removeEmbeddedImage(img.id)}
+                            >
+                              <Trash2 size={10} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Embedded images indicator (when panel is closed) */}
+            {!showImagePanel && embeddedImages.length > 0 && (
+              <div style={{ 
+                display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.8rem',
+                backgroundColor: 'var(--secondary-detail-color)', borderRadius: 'var(--border-radius)',
+                border: '1px solid var(--border-color)', fontSize: '0.82rem', color: 'var(--secondary-color)'
+              }}>
+                <ImageIcon size={13} />
+                <span>{embeddedImages.length} gömülü görsel</span>
+                <button 
+                  type="button" 
+                  className="button small-button" 
+                  style={{ padding: '2px 8px', fontSize: '0.75rem', marginLeft: 'auto' }}
+                  onClick={() => setShowImagePanel(true)}
+                >
+                  Görselleri Göster
+                </button>
               </div>
             )}
 
@@ -693,8 +860,8 @@ export default function AdminEditor({ onBack, editData }) {
               ref={textareaRef}
               className="search-input" 
               rows="15" 
-              placeholder="Yazı içeriğinizi buraya yazın..." 
-              style={{ resize: 'vertical', minHeight: '18rem', fontFamily: 'monospace', marginTop: '0.5rem' }}
+              placeholder="Yazı içeriğinizi buraya yazın... (Görselleri yapıştırabilir veya sürükleyebilirsiniz)" 
+              style={{ resize: 'vertical', minHeight: '18rem', fontFamily: 'monospace', marginTop: '0.5rem', overflowWrap: 'break-word', wordBreak: 'break-word' }}
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onPaste={handlePaste}
@@ -832,7 +999,7 @@ export default function AdminEditor({ onBack, editData }) {
             )}
 
             <div className="post-content">
-              {previewMarkdown(content)}
+              {previewMarkdown(resolveEmbeddedImages(content))}
             </div>
           </article>
         </div>
