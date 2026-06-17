@@ -209,6 +209,45 @@ function getMediaAltForInsert(file) {
   return file.type.startsWith('video/') ? 'video' : file.name;
 }
 
+function getDataUrlExtension(dataUrl) {
+  const mime = dataUrl.match(/^data:([^;]+);/)?.[1] || '';
+  const extensions = {
+    'video/mp4': 'mp4',
+    'video/webm': 'webm',
+    'video/ogg': 'ogg',
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/gif': 'gif',
+  };
+  return extensions[mime] || mime.split('/')[1] || 'bin';
+}
+
+function createSafeMediaFileName(media) {
+  const extension = getDataUrlExtension(media.data);
+  const rawName = (media.name || media.id).replace(/\.[^/.]+$/, '');
+  const safeBase = rawName
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '') || media.id;
+  return `${safeBase}-${media.id}.${extension}`;
+}
+
+async function getGitHubErrorMessage(response, fallback) {
+  let detail = '';
+  try {
+    const data = await response.json();
+    detail = data?.message || JSON.stringify(data);
+  } catch {
+    try {
+      detail = await response.text();
+    } catch {
+      detail = '';
+    }
+  }
+  return `${fallback} GitHub ${response.status}${detail ? `: ${detail}` : ''}`;
+}
+
 function renderMarkdownMedia(altText, mediaUrl, key) {
   const youtubeEmbedUrl = getYouTubeEmbedUrl(mediaUrl);
   const isVideo = isVideoMedia(mediaUrl, altText);
@@ -315,12 +354,28 @@ export default function AdminEditor({ onBack, editData }) {
     setContent(prev => prev.replace(new RegExp(`!\\[[^\\]]*\\]\\(embedded:${id}\\)`, 'g'), ''));
   };
   
-  const resolveEmbeddedImages = (text) => {
+  const resolveEmbeddedImages = (text, videoUrlById = {}) => {
     return text.replace(/!\[([^\]]*)\]\(embedded:(img_\d+)\)/g, (fullMatch, alt, id) => {
+      if (videoUrlById[id]) return `![${alt || 'video'}](${videoUrlById[id]})`;
       const img = embeddedImages.find(i => i.id === id);
       if (img) return `![${alt}](${img.data})`;
       return fullMatch;
     });
+  };
+
+  const getEmbeddedVideoReferences = () => {
+    const refs = [];
+    const seen = new Set();
+    content.replace(/!\[([^\]]*)\]\(embedded:(img_\d+)\)/g, (fullMatch, alt, id) => {
+      if (seen.has(id)) return fullMatch;
+      const media = embeddedImages.find(i => i.id === id);
+      if (media && (media.type === 'video' || media.data.startsWith('data:video/'))) {
+        refs.push({ ...media, alt });
+        seen.add(id);
+      }
+      return fullMatch;
+    });
+    return refs;
   };
   // ---
 
@@ -403,9 +458,6 @@ export default function AdminEditor({ onBack, editData }) {
       "Content-Type": "application/json",
     };
 
-    // Resolve embedded images before publishing
-    const resolvedContent = resolveEmbeddedImages(content);
-
     try {
       setPublishStatus("Makale kütüphanesi (registry.json) indiriliyor...");
       const registryUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/registry.json?ref=${branch}`;
@@ -446,7 +498,7 @@ export default function AdminEditor({ onBack, editData }) {
         console.log("registry.json bulunamadı, yeni oluşturulacak.");
         regData = null;
       } else {
-        throw new Error("Makale kütüphanesi indirilemedi. Erişim anahtarınız hatalı veya yetersiz yetkilere sahip olabilir (repo yetkisi gerekli).");
+        throw new Error(await getGitHubErrorMessage(regRes, "Makale kütüphanesi indirilemedi. Erişim anahtarınız hatalı veya yetersiz yetkilere sahip olabilir (repo yetkisi gerekli)."));
       }
 
       const existingIndex = registryArray.findIndex(p => p.id === slug);
@@ -487,6 +539,51 @@ export default function AdminEditor({ onBack, editData }) {
         console.log("Markdown checking failed or file doesn't exist yet.");
       }
 
+      const videoUrlById = {};
+      const embeddedVideos = getEmbeddedVideoReferences();
+
+      for (const media of embeddedVideos) {
+        const mediaBase64 = media.data.split(',')[1];
+        if (!mediaBase64) throw new Error(`${media.name} video verisi okunamadı.`);
+
+        const mediaFileName = createSafeMediaFileName(media);
+        const mediaPath = `public/media/${slug}/${mediaFileName}`;
+        const mediaUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${mediaPath}`;
+        const publicMediaUrl = `/media/${slug}/${mediaFileName}`;
+
+        setPublishStatus(`Video yükleniyor: ${media.name}`);
+
+        let mediaSha = null;
+        const mediaCheckRes = await fetch(`${mediaUrl}?ref=${branch}`, { headers });
+        if (mediaCheckRes.ok) {
+          const mediaCheckData = await mediaCheckRes.json();
+          mediaSha = mediaCheckData.sha;
+        } else if (mediaCheckRes.status !== 404) {
+          throw new Error(await getGitHubErrorMessage(mediaCheckRes, `${media.name} video durumu kontrol edilemedi.`));
+        }
+
+        const mediaCommitRes = await fetch(mediaUrl, {
+          method: "PUT",
+          headers,
+          body: JSON.stringify({
+            message: `Upload media for post: ${title}`,
+            content: mediaBase64,
+            branch,
+            ...(mediaSha ? { sha: mediaSha } : {})
+          })
+        });
+
+        if (!mediaCommitRes.ok) {
+          throw new Error(await getGitHubErrorMessage(mediaCommitRes, `${media.name} video dosyası yüklenemedi.`));
+        }
+
+        videoUrlById[media.id] = publicMediaUrl;
+      }
+
+      const resolvedContent = resolveEmbeddedImages(content, videoUrlById);
+      if (resolvedContent.includes('data:video/')) {
+        throw new Error("Markdown içinde gömülü video verisi kaldı. Videoyu Medya Ekle panelinden yeniden ekleyin veya YouTube/direct video linki kullanın.");
+      }
       const mdBytes = encoder.encode(resolvedContent);
       const mdBase64 = uint8ArrayToBase64(mdBytes);
 
@@ -501,7 +598,7 @@ export default function AdminEditor({ onBack, editData }) {
         })
       });
 
-      if (!mdCommitRes.ok) throw new Error("Makale dosyası (.md) yüklenemedi.");
+      if (!mdCommitRes.ok) throw new Error(await getGitHubErrorMessage(mdCommitRes, "Makale dosyası (.md) yüklenemedi."));
 
       setPublishStatus("Kütüphane (registry.json) güncelleniyor...");
       const regCommitRes = await fetch(registryUrl, {
@@ -515,7 +612,7 @@ export default function AdminEditor({ onBack, editData }) {
         })
       });
 
-      if (!regCommitRes.ok) throw new Error("Kütüphane dosyası (registry.json) güncellenemedi.");
+      if (!regCommitRes.ok) throw new Error(await getGitHubErrorMessage(regCommitRes, "Kütüphane dosyası (registry.json) güncellenemedi."));
 
       setPublishStatus("Yayınlama başarılı! Siteniz Render'da güncelleniyor (1-2 dakika sürebilir).");
       alert("Yazı başarıyla yayınlandı! Siteniz Render'da güncellenmeye başlandı. 1-2 dakika içinde aktif olacaktır.");
