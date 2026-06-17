@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "rotstead-devlog-test",
+    "title": "Rotstead Devlog Test",
+    "category": "Geliştirme Günlükleri",
+    "date": "2026-06-17",
+    "readTime": "1 dk",
+    "image": "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400",
+    "excerpt": "Açıklama girilmedi.",
+    "file": "rotstead-devlog-test.md"
+  }
+]
