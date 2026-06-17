@@ -187,6 +187,15 @@ function parseInlineMarkdown(text) {
   return tokens;
 }
 
+function uint8ArrayToBase64(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
 export default function AdminEditor({ onBack, editData }) {
   const [title, setTitle] = useState(editData ? editData.title : '');
   const [category, setCategory] = useState(editData ? editData.category : 'Geliştirme Günlükleri');
@@ -281,7 +290,7 @@ export default function AdminEditor({ onBack, editData }) {
       const updatedRegistryText = JSON.stringify(registryArray, null, 2);
       const encoder = new TextEncoder();
       const registryBytes = encoder.encode(updatedRegistryText);
-      const registryBase64 = btoa(String.fromCharCode(...registryBytes));
+      const registryBase64 = uint8ArrayToBase64(registryBytes);
 
       setPublishStatus(`Makale metni (${slug}.md) yükleniyor...`);
       const markdownUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/${slug}.md`;
@@ -298,7 +307,7 @@ export default function AdminEditor({ onBack, editData }) {
       }
 
       const mdBytes = encoder.encode(content);
-      const mdBase64 = btoa(String.fromCharCode(...mdBytes));
+      const mdBase64 = uint8ArrayToBase64(mdBytes);
 
       const mdCommitRes = await fetch(markdownUrl, {
         method: "PUT",
