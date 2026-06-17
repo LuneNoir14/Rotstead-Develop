@@ -17,7 +17,7 @@ async function hashPassword(password) {
 }
 
 // SHA-256 Hash of default password: "rotstead123"
-const ADMIN_PASSWORD_HASH = "c353ec220d52b963625f385c363f8484e9d727b2046db27f80db7241cfb1c55c";
+const ADMIN_PASSWORD_HASH = "424dbe0c9940b63d02b7c48da12dea7d05f43d3e3ba3b17bac3b242801e54c0c";
 
 export default function App() {
   const [posts, setPosts] = useState([]);
