@@ -325,8 +325,25 @@ export default function PostDetail({ post, isAdmin, onBack, onEdit, onDelete }) 
       if (!regRes.ok) throw new Error("Kütüphane dosyası indirilemedi.");
       const regData = await regRes.json();
 
+      let base64Content = regData.content || "";
+      if (!base64Content && regData.sha) {
+        // File is > 1MB, fetch via Blobs API
+        const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${regData.sha}`;
+        const blobRes = await fetch(blobUrl, { headers });
+        if (blobRes.ok) {
+          const blobData = await blobRes.json();
+          base64Content = blobData.content || "";
+        } else {
+          throw new Error("Kütüphane dosya içeriği (blob) indirilemedi.");
+        }
+      }
+
+      if (!base64Content) {
+        throw new Error("Kütüphane dosyası boş veya okunamadı.");
+      }
+
       const decodedRegistryText = new TextDecoder("utf-8").decode(
-        Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
+        Uint8Array.from(atob(base64Content.replace(/\s/g, '')), c => c.charCodeAt(0))
       );
       let registryArray = JSON.parse(decodedRegistryText);
 

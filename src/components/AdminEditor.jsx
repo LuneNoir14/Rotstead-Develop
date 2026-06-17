@@ -359,15 +359,30 @@ export default function AdminEditor({ onBack, editData }) {
 
       if (regRes.ok) {
         regData = await regRes.json();
-        try {
-          const decodedRegistryText = new TextDecoder("utf-8").decode(
-            Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
-          );
-          registryArray = JSON.parse(decodedRegistryText);
-          if (!Array.isArray(registryArray)) registryArray = [];
-        } catch (parseErr) {
-          console.warn("registry.json parse hatası, boş liste ile devam ediliyor:", parseErr);
-          registryArray = [];
+        let base64Content = regData.content || "";
+        if (!base64Content && regData.sha) {
+          // File is > 1MB, fetch via Blobs API
+          const blobUrl = `https://api.github.com/repos/${owner}/${repo}/git/blobs/${regData.sha}`;
+          const blobRes = await fetch(blobUrl, { headers });
+          if (blobRes.ok) {
+            const blobData = await blobRes.json();
+            base64Content = blobData.content || "";
+          } else {
+            throw new Error("Kütüphane dosya içeriği (blob) indirilemedi.");
+          }
+        }
+
+        if (base64Content) {
+          try {
+            const decodedRegistryText = new TextDecoder("utf-8").decode(
+              Uint8Array.from(atob(base64Content.replace(/\s/g, '')), c => c.charCodeAt(0))
+            );
+            registryArray = JSON.parse(decodedRegistryText);
+            if (!Array.isArray(registryArray)) registryArray = [];
+          } catch (parseErr) {
+            console.error("registry.json parse hatası:", parseErr);
+            throw new Error("Kütüphane dosyası (registry.json) ayrıştırılamadı.");
+          }
         }
       } else if (regRes.status === 404) {
         // registry.json henüz yok, sıfırdan oluşturulacak
