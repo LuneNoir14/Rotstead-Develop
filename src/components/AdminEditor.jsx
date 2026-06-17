@@ -238,6 +238,49 @@ export default function AdminEditor({ onBack, editData }) {
     }
   };
 
+  const handlePaste = (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf("image") !== -1) {
+        const file = items[i].getAsFile();
+        if (file) {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const base64Url = event.target?.result;
+            if (base64Url) {
+              insertFormatting(`![Pasted Image](${base64Url})`);
+            }
+          };
+          reader.readAsDataURL(file);
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
+  const handleDrop = (e) => {
+    const files = e.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.type.indexOf("image") !== -1) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64Url = event.target?.result;
+        if (base64Url) {
+          insertFormatting(`![${file.name}](${base64Url})`);
+        }
+      };
+      reader.readAsDataURL(file);
+      e.preventDefault();
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
   const publishToGithub = async () => {
     const token = localStorage.getItem('githubToken');
     if (!token) {
@@ -654,6 +697,9 @@ export default function AdminEditor({ onBack, editData }) {
               style={{ resize: 'vertical', minHeight: '18rem', fontFamily: 'monospace', marginTop: '0.5rem' }}
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onPaste={handlePaste}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
             />
           </div>
 
