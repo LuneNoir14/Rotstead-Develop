@@ -355,12 +355,33 @@ export default function AdminEditor({ onBack, editData }) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', gridColumn: 'span 2' }}>
-                <label htmlFor="post-image" style={{ fontWeight: '600', fontSize: '0.95rem' }}>Kapak Resmi URL</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label htmlFor="post-image" style={{ fontWeight: '600', fontSize: '0.95rem' }}>Kapak Resmi (Görsel URL veya Yerel Dosya)</label>
+                  <label className="button small-button" style={{ cursor: 'pointer', padding: '2px 8px', fontSize: '0.8rem' }}>
+                    <span>Yerel Görsel Seç (Base64)</span>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      style={{ display: 'none' }} 
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const base64Url = event.target?.result;
+                            if (base64Url) setImage(base64Url);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
                 <input 
                   id="post-image"
                   type="text" 
                   className="search-input" 
-                  placeholder="https://images.unsplash.com/..." 
+                  placeholder="https://images.unsplash.com/... veya yerel görsel seçin" 
                   value={image}
                   onChange={(e) => setImage(e.target.value)}
                 />
