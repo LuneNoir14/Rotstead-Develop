@@ -229,15 +229,59 @@ function parseInlineMarkdown(text) {
     } else if (m.text.startsWith('![')) {
       const alt = m.text.slice(2, m.text.indexOf(']'));
       const url = m.text.slice(m.text.indexOf('(') + 1, -1);
-      const hasCaption = alt && alt.trim() && !/^img_\d+$/i.test(alt) && alt !== 'Görsel' && alt !== 'image';
-      tokens.push(
-        <figure key={m.index} className="post-inline-figure">
-          <img src={url} alt={alt} />
-          {hasCaption && (
-            <figcaption className="post-inline-caption">{alt}</figcaption>
-          )}
-        </figure>
-      );
+      const hasCaption = alt && alt.trim() && !/^img_\d+$/i.test(alt) && alt !== 'Görsel' && alt !== 'image' && alt !== 'video';
+      
+      const getYouTubeEmbedUrl = (link) => {
+        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+        const match = link.match(regExp);
+        return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+      };
+
+      const youtubeEmbedUrl = getYouTubeEmbedUrl(url);
+      const isDirectVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ogg') || alt === 'video';
+
+      if (youtubeEmbedUrl) {
+        tokens.push(
+          <figure key={m.index} className="post-inline-figure" style={{ width: '100%', maxWidth: '650px' }}>
+            <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0 }}>
+              <iframe
+                src={youtubeEmbedUrl}
+                title={alt || "YouTube Video"}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}
+              />
+            </div>
+            {hasCaption && (
+              <figcaption className="post-inline-caption">{alt}</figcaption>
+            )}
+          </figure>
+        );
+      } else if (isDirectVideo) {
+        tokens.push(
+          <figure key={m.index} className="post-inline-figure">
+            <video 
+              src={url} 
+              controls 
+              preload="metadata" 
+              style={{ width: '100%', maxHeight: '450px', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}
+            />
+            {hasCaption && (
+              <figcaption className="post-inline-caption">{alt !== 'video' ? alt : ''}</figcaption>
+            )}
+          </figure>
+        );
+      } else {
+        tokens.push(
+          <figure key={m.index} className="post-inline-figure">
+            <img src={url} alt={alt} />
+            {hasCaption && (
+              <figcaption className="post-inline-caption">{alt}</figcaption>
+            )}
+          </figure>
+        );
+      }
     } else if (m.text.startsWith('[')) {
       const label = m.text.slice(1, m.text.indexOf(']'));
       const url = m.text.slice(m.text.indexOf('(') + 1, -1);
