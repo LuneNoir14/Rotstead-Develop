@@ -57,29 +57,8 @@ export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmi
       <div className="header-top">
         <a href="#" className="logo-container" onClick={handleHomeClick}>
           <img className="logo-image" src="/rotsteadlogo.png" alt="Rotstead" />
-          <h1 className="site-title">Devblog</h1>
+          <h1 className="site-title">Rotstead Devblog</h1>
         </a>
-        
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {isAdmin && (
-            <button className="button small-button" onClick={onLogout} style={{ borderColor: 'var(--game-red)', color: 'var(--game-red)' }}>
-              <span>Çıkış Yap</span>
-            </button>
-          )}
-          <button className="button small-button" onClick={toggleTheme} aria-label="Temayı Değiştir">
-            {theme === 'dark' ? (
-              <>
-                <Sun size={16} />
-                <span>Gündüz Modu</span>
-              </>
-            ) : (
-              <>
-                <Moon size={16} />
-                <span>Gece Modu</span>
-              </>
-            )}
-          </button>
-        </div>
       </div>
 
       <nav>
@@ -115,6 +94,28 @@ export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmi
                 <PenLine size={16} />
                 <span>Yönetici</span>
               </a>
+            </li>
+          )}
+          <li>
+            <button className="button small-button" onClick={toggleTheme} aria-label="Temayı Değiştir">
+              {theme === 'dark' ? (
+                <>
+                  <Sun size={16} />
+                  <span>Gündüz Modu</span>
+                </>
+              ) : (
+                <>
+                  <Moon size={16} />
+                  <span>Gece Modu</span>
+                </>
+              )}
+            </button>
+          </li>
+          {isAdmin && (
+            <li>
+              <button className="button small-button logout-button" onClick={onLogout}>
+                <span>Çıkış Yap</span>
+              </button>
             </li>
           )}
         </ul>
