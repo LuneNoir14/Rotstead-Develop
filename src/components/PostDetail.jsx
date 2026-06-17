@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Calendar, Clock, Tag } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, Tag, PenLine } from 'lucide-react';
 
 // A lightweight custom Markdown parser that outputs React elements
 function parseMarkdown(content) {
@@ -227,7 +227,7 @@ function parseInlineMarkdown(text) {
   return tokens;
 }
 
-export default function PostDetail({ post, onBack }) {
+export default function PostDetail({ post, isAdmin, onBack, onEdit }) {
   const [content, setContent] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -289,6 +289,15 @@ export default function PostDetail({ post, onBack }) {
           parseMarkdown(content)
         )}
       </div>
+
+      {!loading && isAdmin && onEdit && (
+        <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-color)', paddingTop: '1.5rem', display: 'flex', justifyContent: 'flex-start' }}>
+          <button className="button" onClick={() => onEdit(post, content)}>
+            <PenLine size={16} />
+            <span>Yazıyı Düzenle</span>
+          </button>
+        </div>
+      )}
     </article>
   );
 }

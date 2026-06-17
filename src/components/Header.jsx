@@ -18,7 +18,7 @@ const GithubIcon = ({ size = 16 }) => (
   </svg>
 );
 
-export default function Header({ currentTab, setCurrentTab, resetFilters }) {
+export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmin, onLogout }) {
   const [theme, setTheme] = useState(() => {
     // Check local storage or document root
     if (typeof window !== 'undefined') {
@@ -62,19 +62,26 @@ export default function Header({ currentTab, setCurrentTab, resetFilters }) {
           <h1 className="site-title">Rotstead Devblog</h1>
         </a>
         
-        <button className="button small-button" onClick={toggleTheme} aria-label="Temayı Değiştir">
-          {theme === 'dark' ? (
-            <>
-              <Sun size={16} />
-              <span>Gündüz Modu</span>
-            </>
-          ) : (
-            <>
-              <Moon size={16} />
-              <span>Gece Modu</span>
-            </>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {isAdmin && (
+            <button className="button small-button" onClick={onLogout} style={{ borderColor: 'var(--game-red)', color: 'var(--game-red)' }}>
+              <span>Çıkış Yap</span>
+            </button>
           )}
-        </button>
+          <button className="button small-button" onClick={toggleTheme} aria-label="Temayı Değiştir">
+            {theme === 'dark' ? (
+              <>
+                <Sun size={16} />
+                <span>Gündüz Modu</span>
+              </>
+            ) : (
+              <>
+                <Moon size={16} />
+                <span>Gece Modu</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       <nav>
@@ -97,12 +104,14 @@ export default function Header({ currentTab, setCurrentTab, resetFilters }) {
               <span>Hakkımda & İletişim</span>
             </a>
           </li>
-          <li>
-            <a href="#" className={`button small-button ${currentTab === 'editor' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('editor'); }}>
-              <PenLine size={16} />
-              <span>Yazı Ekle</span>
-            </a>
-          </li>
+          {isAdmin && (
+            <li>
+              <a href="#" className={`button small-button ${currentTab === 'editor' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('editor'); }}>
+                <PenLine size={16} />
+                <span>Yazı Ekle</span>
+              </a>
+            </li>
+          )}
         </ul>
       </nav>
     </header>

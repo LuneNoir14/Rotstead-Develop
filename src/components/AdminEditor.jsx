@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { PenTool, Eye, FileText, Check, Copy } from 'lucide-react';
-import { ArrowLeft } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { 
+  PenTool, Eye, FileText, Check, Copy, 
+  Bold, Italic, Heading2, Heading3, Code, Quote, Table, Image as ImageIcon, Link as LinkIcon, 
+  Download, Upload, ArrowLeft 
+} from 'lucide-react';
 
 // Custom Markdown parser wrapper just for previewing
 function previewMarkdown(content) {
@@ -138,7 +141,7 @@ function previewMarkdown(content) {
 function parseInlineMarkdown(text) {
   if (!text) return '';
   const tokens = [];
-  const regex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\))/g;
+  const regex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\)|!\[.*?\]\(.*?\))/g;
   let match;
   let lastIdx = 0;
   const matches = [];
@@ -150,7 +153,21 @@ function parseInlineMarkdown(text) {
   matches.forEach(m => {
     if (m.index > lastIdx) tokens.push(text.slice(lastIdx, m.index));
     const tokenText = m.text;
-    if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
+    
+    if (tokenText.startsWith('![') && tokenText.includes('](')) {
+      // Image tag
+      const closeBracket = tokenText.indexOf(']');
+      const altText = tokenText.slice(2, closeBracket);
+      const imageUrl = tokenText.slice(closeBracket + 2, -1);
+      tokens.push(
+        <img 
+          key={currentKey++} 
+          src={imageUrl} 
+          alt={altText} 
+          style={{ maxWidth: '100%', borderRadius: '4px', margin: '0.8rem 0', display: 'block', border: '1px solid var(--border-color)' }} 
+        />
+      );
+    } else if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
       tokens.push(<strong key={currentKey++}>{tokenText.slice(2, -2)}</strong>);
     } else if (tokenText.startsWith('`') && tokenText.endsWith('`')) {
       tokens.push(<code key={currentKey++}>{tokenText.slice(1, -1)}</code>);
@@ -170,16 +187,23 @@ function parseInlineMarkdown(text) {
   return tokens;
 }
 
-export default function AdminEditor({ onBack }) {
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Geliştirme Günlükleri');
-  const [image, setImage] = useState('https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400');
-  const [excerpt, setExcerpt] = useState('');
-  const [content, setContent] = useState('');
+export default function AdminEditor({ onBack, editData }) {
+  const [title, setTitle] = useState(editData ? editData.title : '');
+  const [category, setCategory] = useState(editData ? editData.category : 'Geliştirme Günlükleri');
+  const [image, setImage] = useState(editData ? editData.image : 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=400');
+  const [excerpt, setExcerpt] = useState(editData ? editData.excerpt : '');
+  const [content, setContent] = useState(editData ? editData.content : '');
   
   const [copiedRegistry, setCopiedRegistry] = useState(false);
   const [copiedMarkdown, setCopiedMarkdown] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
+  
+  const [showImagePanel, setShowImagePanel] = useState(false);
+  const [imageUrlInput, setImageUrlInput] = useState('');
+  const [imageAltInput, setImageAltInput] = useState('');
+  
+  const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
 
   // Auto generate slug
   const getSlug = (text) => {
@@ -212,17 +236,74 @@ export default function AdminEditor({ onBack }) {
     file: `${slug}.md`
   }, null, 2);
 
-  // Generated markdown content for the post file
-  const generatedMarkdown = content;
-
   const copyToClipboard = (text, setCopied) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Helper to insert formatting templates into the cursor position
+  const insertFormatting = (beforeVal, afterVal = '') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = textarea.value;
+    const selected = text.substring(start, end);
+    
+    const replacement = beforeVal + (selected || '') + afterVal;
+    const newValue = text.substring(0, start) + replacement + text.substring(end);
+    
+    setContent(newValue);
+    
+    // Focus back and set cursor selection range
+    setTimeout(() => {
+      textarea.focus();
+      textarea.selectionStart = start + beforeVal.length;
+      textarea.selectionEnd = start + beforeVal.length + (selected || '').length;
+    }, 50);
+  };
+
+  // Convert dragged local image to base64 data URL
+  const handleImageFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Url = event.target?.result;
+      if (base64Url) {
+        insertFormatting(`![${file.name}](${base64Url})`);
+        setShowImagePanel(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // Add image via URL
+  const handleAddImageUrl = (e) => {
+    e.preventDefault();
+    if (!imageUrlInput) return;
+    insertFormatting(`![${imageAltInput || 'Görsel'}](${imageUrlInput})`);
+    setImageUrlInput('');
+    setImageAltInput('');
+    setShowImagePanel(false);
+  };
+
+  // Download .md file directly
+  const downloadMarkdownFile = () => {
+    const element = document.createElement("a");
+    const file = new Blob([content], {type: 'text/markdown'});
+    element.href = URL.createObjectURL(file);
+    element.download = `${slug}.md`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--primary-spacing)', maxWidth: '65rem', margin: '0 auto', width: '100%' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--primary-spacing)', maxWidth: '70rem', margin: '0 auto', width: '100%' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button className="button small-button" onClick={onBack}>
@@ -245,7 +326,7 @@ export default function AdminEditor({ onBack }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--primary-spacing)' }}>
           {/* Metadata Fields */}
           <div className="glass-card default-padding">
-            <h2>Yeni Makale Detayları</h2>
+            <h2>Yazı Detayları</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(20rem, 1fr))', gap: '0.8rem', marginTop: 'var(--secondary-spacing)' }}>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
@@ -254,7 +335,7 @@ export default function AdminEditor({ onBack }) {
                   id="post-title"
                   type="text" 
                   className="search-input" 
-                  placeholder="örn: Araç Sürüş Mekanikleri Güncellemesi" 
+                  placeholder="örn: Alpha v0.1.2 Güncelleme Notları" 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                 />
@@ -274,7 +355,7 @@ export default function AdminEditor({ onBack }) {
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', gridColumn: 'span 2' }}>
-                <label htmlFor="post-image" style={{ fontWeight: '600', fontSize: '0.95rem' }}>Görsel URL</label>
+                <label htmlFor="post-image" style={{ fontWeight: '600', fontSize: '0.95rem' }}>Kapak Resmi URL</label>
                 <input 
                   id="post-image"
                   type="text" 
@@ -300,55 +381,153 @@ export default function AdminEditor({ onBack }) {
             </div>
           </div>
 
-          {/* Markdown Content Area */}
-          <div className="glass-card default-padding">
-            <h2>İçerik (Markdown)</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--detail-color)', marginBottom: '0.5rem' }}>
-              İçerikte normal yazıların yanı sıra başlıklar için <code>## Başlık 2</code> veya <code>### Başlık 3</code>, listeler için <code>- Öge</code>, alıntılar için <code>&gt; Alıntı</code>, kalın metinler için <code>**kalın**</code> ve kod blokları için üçlü backtick <code>```csharp</code> kullanabilirsiniz.
-            </p>
+          {/* Formatting & Editor Panel */}
+          <div className="glass-card default-padding" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <h2>Yazı İçeriği</h2>
+              
+              {/* Text formatting toolbar */}
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', backgroundColor: 'var(--secondary-detail-color)', padding: '4px', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Kalın" onClick={() => insertFormatting('**', '**')}>
+                  <Bold size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Eğik" onClick={() => insertFormatting('*', '*')}>
+                  <Italic size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Başlık 2" onClick={() => insertFormatting('\n## ', '\n')}>
+                  <Heading2 size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Başlık 3" onClick={() => insertFormatting('\n### ', '\n')}>
+                  <Heading3 size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Kod Bloğu" onClick={() => insertFormatting('\n```csharp\n', '\n```\n')}>
+                  <Code size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Alıntı" onClick={() => insertFormatting('\n> ', '\n')}>
+                  <Quote size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Tablo Ekle" onClick={() => insertFormatting('\n| Başlık 1 | Başlık 2 |\n| :--- | :--- |\n| Hücre 1 | Hücre 2 |\n')}>
+                  <Table size={14} />
+                </button>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px', color: 'var(--accent-color)' }} title="Görsel Ekle/Yükle" onClick={() => setShowImagePanel(!showImagePanel)}>
+                  <ImageIcon size={14} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Görsel Ekle</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Expansible Image upload panel */}
+            {showImagePanel && (
+              <div className="glass-card" style={{ padding: '1rem', borderStyle: 'dashed', borderColor: 'var(--accent-color)', backgroundColor: 'rgba(224, 122, 95, 0.05)', marginTop: '0.5rem' }}>
+                <h4 style={{ marginBottom: '0.5rem' }}>Görsel Ekleme Paneli</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: '1rem' }}>
+                  
+                  {/* File Upload Zone */}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border-color)', padding: '1rem', borderRadius: 'var(--border-radius)', backgroundColor: 'var(--background-color)', textAlign: 'center' }}>
+                    <Upload size={24} style={{ color: 'var(--accent-color)', marginBottom: '0.5rem' }} />
+                    <p style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.5rem' }}>Bilgisayardan Sürükleyin veya Seçin</p>
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      style={{ display: 'none' }} 
+                      ref={fileInputRef} 
+                      onChange={handleImageFileChange}
+                    />
+                    <button type="button" className="button small-button" onClick={() => fileInputRef.current?.click()}>
+                      Dosya Seç
+                    </button>
+                    <small style={{ fontSize: '0.75rem', marginTop: '0.4rem', color: 'var(--detail-color)' }}>
+                      Seçilen görsel otomatik olarak yazının içine gömülecektir.
+                    </small>
+                  </div>
+
+                  {/* URL Input Form */}
+                  <form onSubmit={handleAddImageUrl} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <label htmlFor="img-url" style={{ fontSize: '0.8rem', fontWeight: '600' }}>Görsel İnternet Linki (URL)</label>
+                      <input 
+                        id="img-url"
+                        type="text" 
+                        className="search-input" 
+                        placeholder="https://images.unsplash.com/..." 
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                        value={imageUrlInput}
+                        onChange={(e) => setImageUrlInput(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      <label htmlFor="img-alt" style={{ fontSize: '0.8rem', fontWeight: '600' }}>Açıklama</label>
+                      <input 
+                        id="img-alt"
+                        type="text" 
+                        className="search-input" 
+                        placeholder="örn: Karakter envanter görüntüsü" 
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
+                        value={imageAltInput}
+                        onChange={(e) => setImageAltInput(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="button small-button" style={{ alignSelf: 'flex-start' }}>
+                      <LinkIcon size={12} />
+                      <span>Link ile Ekle</span>
+                    </button>
+                  </form>
+
+                </div>
+              </div>
+            )}
+
             <textarea 
+              id="post-content-area"
+              ref={textareaRef}
               className="search-input" 
-              rows="12" 
-              placeholder="Oyun geliştirme günlüğünüzü buraya yazın..." 
-              style={{ resize: 'vertical', minHeight: '15rem', fontFamily: 'monospace' }}
+              rows="15" 
+              placeholder="Yazı içeriğinizi buraya yazın..." 
+              style={{ resize: 'vertical', minHeight: '18rem', fontFamily: 'monospace', marginTop: '0.5rem' }}
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
           </div>
 
-          {/* Code Generation Output */}
+          {/* Yayına Alma Kodu Üretici */}
           <div className="glass-card default-padding">
-            <h2>Yayına Alma Kodu Üretici</h2>
-            <p style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Makaleniz hazır olduğunda, aşağıdaki iki adım ile projenizin yayınına ekleyebilirsiniz:
-            </p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1rem' }}>
+              <div>
+                <h2>Yazıyı Yayınlama Kodları</h2>
+                <p style={{ fontSize: '0.88rem', color: 'var(--secondary-color)', marginTop: '0.2rem' }}>
+                  Yazınız bittiğinde aşağıdaki adımları sırayla izleyerek sitenizde yayınlayabilirsiniz.
+                </p>
+              </div>
+              <button className="button" onClick={downloadMarkdownFile}>
+                <Download size={16} />
+                <span>Yazı Dosyasını İndir (.md)</span>
+              </button>
+            </div>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
               
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                  <strong>Adım 1: Bu JSON kodunu <code>public/posts/registry.json</code> dosyasının en üstüne (köşeli parantezin içine) ekleyin:</strong>
+                  <strong>Adım 1: Bu JSON bloğunu kopyalayıp <code>public/posts/registry.json</code> dosyasının en üstüne (köşeli parantezin içine) yapıştırın:</strong>
                   <button className="button small-button" onClick={() => copyToClipboard(generatedJson, setCopiedRegistry)}>
                     {copiedRegistry ? <Check size={14} /> : <Copy size={14} />}
                     <span>{copiedRegistry ? 'Kopyalandı!' : 'Kopyala'}</span>
                   </button>
                 </div>
-                <pre style={{ backgroundColor: 'var(--secondary-detail-color)', padding: '0.8rem', borderRadius: '0.5rem', overflowX: 'auto', fontSize: '0.85rem', border: '1px solid var(--primary-color)' }}>
+                <pre style={{ backgroundColor: 'var(--secondary-detail-color)', padding: '0.8rem', borderRadius: 'var(--border-radius)', overflowX: 'auto', fontSize: '0.85rem', border: '1px solid var(--border-color)' }}>
                   <code>{generatedJson}</code>
                 </pre>
               </div>
 
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                  <strong>Adım 2: <code>public/posts/{slug}.md</code> adında yeni bir dosya oluşturup aşağıdaki içeriği içine yapıştırın:</strong>
-                  <button className="button small-button" onClick={() => copyToClipboard(generatedMarkdown, setCopiedMarkdown)}>
-                    {copiedMarkdown ? <Check size={14} /> : <Copy size={14} />}
-                    <span>{copiedMarkdown ? 'Kopyalandı!' : 'Kopyala'}</span>
-                  </button>
-                </div>
-                <pre style={{ backgroundColor: 'var(--secondary-detail-color)', padding: '0.8rem', borderRadius: '0.5rem', overflowX: 'auto', fontSize: '0.85rem', maxHeight: '15rem', overflowY: 'auto', border: '1px solid var(--primary-color)' }}>
-                  <code>{generatedMarkdown || '# Henüz içerik girilmedi'}</code>
-                </pre>
+              <div className="glass-card" style={{ borderStyle: 'dashed', borderColor: 'var(--accent-color)', padding: '1rem', backgroundColor: 'var(--secondary-detail-color)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-color)', marginBottom: '0.4rem' }}>
+                  <FileText size={18} /> Adım 2: Makale Dosyasını Kaydedin
+                </h4>
+                <ol style={{ paddingLeft: '1.2rem', display: 'flex', flexDirection: 'column', gap: '0.3rem', fontSize: '0.9rem' }}>
+                  <li>Yukarıdaki <strong>"Yazı Dosyasını İndir (.md)"</strong> butonuna basarak dosyayı indirin.</li>
+                  <li>İndirilen dosyayı projenizdeki <strong><code>public/posts/</code></strong> klasörünün içine yerleştirin (ismi otomatik olarak <code>{slug}.md</code> olacaktır).</li>
+                  <li>GitHub Desktop uygulamasını açıp yaptığınız bu değişiklikleri commitleyin ve pushlayın!</li>
+                </ol>
               </div>
 
             </div>
@@ -357,8 +536,8 @@ export default function AdminEditor({ onBack }) {
       ) : (
         /* Blog Post Live Style Preview */
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--primary-spacing)' }}>
-          <div className="glass-card" style={{ padding: '0.5rem 1rem', textAlign: 'center', backgroundColor: 'var(--accent-color)', color: 'white', fontWeight: 'bold', borderRadius: 'var(--border-radius)' }}>
-            Canlı Önizleme Modu (Ziyaretçileriniz makaleyi bu şekilde görecek)
+          <div className="glass-card" style={{ padding: '0.6rem 1.2rem', textAlign: 'center', backgroundColor: 'var(--accent-color)', color: 'white', fontWeight: 'bold', borderRadius: 'var(--border-radius)' }}>
+            Önizleme Modu (Canlı sitenizde bu şekilde görünecektir)
           </div>
           
           <article className="article-blog-post">

@@ -5,7 +5,19 @@ import PostDetail from './components/PostDetail';
 import About from './components/About';
 import AdminEditor from './components/AdminEditor';
 import Footer from './components/Footer';
-import { Search, ChevronRight, Activity, BookOpen, MessageCircle, Heart, Coffee, Droplet, Zap } from 'lucide-react';
+import { Search, ChevronRight, Activity, BookOpen, MessageCircle, Heart, Coffee, Droplet, Zap, Lock, Key } from 'lucide-react';
+
+// SHA-256 helper for client-side password hashing
+async function hashPassword(password) {
+  const msgBuffer = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+// SHA-256 Hash of default password: "rotstead123"
+const ADMIN_PASSWORD_HASH = "c353ec220d52b963625f385c363f8484e9d727b2046db27f80db7241cfb1c55c";
 
 export default function App() {
   const [posts, setPosts] = useState([]);
@@ -16,6 +28,17 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const postsPerPage = 3;
+
+  // Admin Authentication State
+  const [isAdmin, setIsAdmin] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('isAdmin') === 'true';
+    }
+    return false;
+  });
+  
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   // Load registry on mount
   useEffect(() => {
@@ -36,10 +59,14 @@ export default function App() {
       });
   }, []);
 
-  // Sync state with URL hash
+  // Sync state with URL hash & Guard routes
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+      
+      // Admin Route Guard
+      const currentAdminState = localStorage.getItem('isAdmin') === 'true';
+
       if (hash.startsWith('#/post/')) {
         const id = hash.replace('#/post/', '');
         setSelectedPostId(id);
@@ -49,8 +76,20 @@ export default function App() {
         setCurrentTab('about');
         window.scrollTo(0, 0);
       } else if (hash === '#/editor') {
-        setCurrentTab('editor');
-        window.scrollTo(0, 0);
+        if (!currentAdminState) {
+          // Redirect to login if trying to access editor unauthorized
+          window.location.hash = '#/admin';
+        } else {
+          setCurrentTab('editor');
+          window.scrollTo(0, 0);
+        }
+      } else if (hash === '#/admin') {
+        if (currentAdminState) {
+          window.location.hash = '#/editor';
+        } else {
+          setCurrentTab('admin');
+          window.scrollTo(0, 0);
+        }
       } else if (hash.startsWith('#/category/')) {
         const cat = decodeURIComponent(hash.replace('#/category/', ''));
         setSelectedCategory(cat);
@@ -68,6 +107,35 @@ export default function App() {
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
+
+  // Handle Admin Login
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError('');
+    
+    try {
+      const hashed = await hashPassword(passwordInput);
+      if (hashed === ADMIN_PASSWORD_HASH) {
+        setIsAdmin(true);
+        localStorage.setItem('isAdmin', 'true');
+        setPasswordInput('');
+        window.location.hash = '#/editor';
+      } else {
+        setLoginError('Hatalı yönetici şifresi!');
+        setPasswordInput('');
+      }
+    } catch (err) {
+      console.error(err);
+      setLoginError('Şifre doğrulanırken bir hata oluştu.');
+    }
+  };
+
+  // Handle Admin Logout
+  const handleLogout = () => {
+    setIsAdmin(false);
+    localStorage.removeItem('isAdmin');
+    window.location.hash = '#/';
+  };
 
   // Calculate unique categories and count of posts in each
   const categoryCounts = posts.reduce((acc, post) => {
@@ -121,10 +189,15 @@ export default function App() {
   // Find active post
   const activePost = posts.find(p => p.id === selectedPostId);
 
+  // States to pass for editing
+  const [editingPostData, setEditingPostData] = useState(null);
+
   return (
     <>
       <Header 
         currentTab={currentTab} 
+        isAdmin={isAdmin}
+        onLogout={handleLogout}
         setCurrentTab={(tab) => {
           if (tab === 'home') window.location.hash = '#/';
           if (tab === 'about') window.location.hash = '#/about';
@@ -137,6 +210,7 @@ export default function App() {
         {currentTab === 'post' && activePost ? (
           <PostDetail 
             post={activePost} 
+            isAdmin={isAdmin}
             onBack={() => {
               if (selectedCategory) {
                 window.location.hash = `#/category/${encodeURIComponent(selectedCategory)}`;
@@ -144,16 +218,82 @@ export default function App() {
                 window.location.hash = '#/';
               }
             }} 
+            onEdit={(post, content) => {
+              setEditingPostData({ ...post, content });
+              window.location.hash = '#/editor';
+            }}
           />
         ) : currentTab === 'about' ? (
           <About />
-        ) : currentTab === 'editor' ? (
-          <AdminEditor onBack={() => { window.location.hash = '#/'; }} />
+        ) : currentTab === 'admin' ? (
+          /* Admin Login Card */
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh', width: '100%' }}>
+            <div className="glass-card" style={{ width: '100%', maxWidth: '24rem', padding: '2rem' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', justifyContent: 'center' }}>
+                <Lock size={20} />
+                <span>Yönetici Girişi</span>
+              </h2>
+              <p style={{ fontSize: '0.9rem', color: 'var(--secondary-color)', textAlign: 'center', marginBottom: '1.2rem' }}>
+                Rotstead Devblog üzerinde makale yazmak veya düzenlemek için şifrenizi girin.
+              </p>
+              <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label htmlFor="admin-pass" style={{ fontSize: '0.85rem', fontWeight: '600' }}>Şifre</label>
+                  <input 
+                    id="admin-pass"
+                    type="password" 
+                    className="search-input" 
+                    placeholder="••••••••" 
+                    required 
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                  />
+                </div>
+                {loginError && (
+                  <p style={{ color: 'var(--game-red)', fontSize: '0.85rem', fontWeight: 'bold', textAlign: 'center' }}>
+                    {loginError}
+                  </p>
+                )}
+                <button type="submit" className="button" style={{ justifyContent: 'center', marginTop: '0.5rem' }}>
+                  <Key size={16} />
+                  <span>Giriş Yap</span>
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : currentTab === 'editor' && isAdmin ? (
+          <AdminEditor 
+            onBack={() => {
+              setEditingPostData(null);
+              window.location.hash = '#/';
+            }} 
+            editData={editingPostData}
+          />
         ) : (
           <div className="home-main">
             {/* Sidebar taxonomies */}
             <aside className="home-taxonomies">
               
+              {/* Blog summary widget */}
+              <div className="glass-card widget">
+                <h3 className="widget-title">
+                  <Activity size={18} /> Durum Raporu
+                </h3>
+                <ul className="widget-list" style={{ gap: '0.4rem', fontSize: '0.95rem' }}>
+                  <li style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Geliştirici:</span>
+                    <strong>Geliştirici</strong>
+                  </li>
+                  <li style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Aktif Proje:</span>
+                    <strong style={{ color: 'var(--accent-color)' }}>Rotstead</strong>
+                  </li>
+                  <li style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Durum:</span>
+                    <strong style={{ color: 'var(--game-yellow)' }}>Aktif Geliştirme</strong>
+                  </li>
+                </ul>
+              </div>
 
               {/* Categories Widget */}
               <div className="glass-card widget">
@@ -229,7 +369,7 @@ export default function App() {
                 <input 
                   type="text" 
                   className="search-input" 
-                  placeholder="Yazılarda ara... (örn: zombi, fizik, ağ)" 
+                  placeholder="Yazılarda ara..." 
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
@@ -251,10 +391,10 @@ export default function App() {
                   <div className="glass-card" style={{ padding: '3rem', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
                     <p style={{ fontSize: '1.2rem', fontWeight: 'bold' }}>Henüz hiç yazı eklenmemiş!</p>
                     <p style={{ fontSize: '0.95rem', color: 'var(--secondary-color)' }}>
-                      Blogunuzu doldurmak için üst menüdeki <strong>"Yazı Ekle"</strong> butonuna tıklayarak ilk makalenizi oluşturabilirsiniz.
+                      Blogunuzu doldurmak için yönetici girişi yapıp ilk makalenizi oluşturabilirsiniz.
                     </p>
-                    <a href="#/editor" className="button" style={{ marginTop: '0.5rem' }}>
-                      İlk Yazıyı Ekle
+                    <a href="#/admin" className="button" style={{ marginTop: '0.5rem' }}>
+                      Yönetici Girişi Yap
                     </a>
                   </div>
                 ) : currentPosts.length > 0 ? (
