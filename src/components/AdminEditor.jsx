@@ -353,13 +353,29 @@ export default function AdminEditor({ onBack, editData }) {
       setPublishStatus("Makale kütüphanesi (registry.json) indiriliyor...");
       const registryUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/registry.json?ref=${branch}`;
       const regRes = await fetch(registryUrl, { headers });
-      if (!regRes.ok) throw new Error("Makale kütüphanesi indirilemedi. Erişim anahtarınız hatalı veya yetersiz yetkilere sahip olabilir (repo yetkisi gerekli).");
-      const regData = await regRes.json();
       
-      const decodedRegistryText = new TextDecoder("utf-8").decode(
-        Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
-      );
-      let registryArray = JSON.parse(decodedRegistryText);
+      let regData = null;
+      let registryArray = [];
+
+      if (regRes.ok) {
+        regData = await regRes.json();
+        try {
+          const decodedRegistryText = new TextDecoder("utf-8").decode(
+            Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
+          );
+          registryArray = JSON.parse(decodedRegistryText);
+          if (!Array.isArray(registryArray)) registryArray = [];
+        } catch (parseErr) {
+          console.warn("registry.json parse hatası, boş liste ile devam ediliyor:", parseErr);
+          registryArray = [];
+        }
+      } else if (regRes.status === 404) {
+        // registry.json henüz yok, sıfırdan oluşturulacak
+        console.log("registry.json bulunamadı, yeni oluşturulacak.");
+        regData = null;
+      } else {
+        throw new Error("Makale kütüphanesi indirilemedi. Erişim anahtarınız hatalı veya yetersiz yetkilere sahip olabilir (repo yetkisi gerekli).");
+      }
 
       const existingIndex = registryArray.findIndex(p => p.id === slug);
       
@@ -422,8 +438,8 @@ export default function AdminEditor({ onBack, editData }) {
         body: JSON.stringify({
           message: `Update registry for post: ${title}`,
           content: registryBase64,
-          sha: regData.sha,
-          branch
+          branch,
+          ...(regData && regData.sha ? { sha: regData.sha } : {})
         })
       });
 
