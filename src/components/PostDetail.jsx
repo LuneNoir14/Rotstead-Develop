@@ -204,7 +204,15 @@ function parseInlineMarkdown(text) {
     } else if (m.text.startsWith('![')) {
       const alt = m.text.slice(2, m.text.indexOf(']'));
       const url = m.text.slice(m.text.indexOf('(') + 1, -1);
-      tokens.push(<img key={m.index} src={url} alt={alt} />);
+      const hasCaption = alt && alt.trim() && !/^img_\d+$/i.test(alt) && alt !== 'Görsel' && alt !== 'image';
+      tokens.push(
+        <figure key={m.index} className="post-inline-figure">
+          <img src={url} alt={alt} />
+          {hasCaption && (
+            <figcaption className="post-inline-caption">{alt}</figcaption>
+          )}
+        </figure>
+      );
     } else if (m.text.startsWith('[')) {
       const label = m.text.slice(1, m.text.indexOf(']'));
       const url = m.text.slice(m.text.indexOf('(') + 1, -1);
