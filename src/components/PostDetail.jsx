@@ -234,7 +234,7 @@ export default function PostDetail({ post, isAdmin, onBack, onEdit }) {
   useEffect(() => {
     if (post && post.file) {
       setLoading(true);
-      fetch(`./posts/${post.file}`)
+      fetch(`./posts/${post.file}?t=${Date.now()}`)
         .then(res => {
           if (!res.ok) throw new Error("İçerik dosyası bulunamadı.");
           return res.text();

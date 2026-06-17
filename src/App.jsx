@@ -43,7 +43,7 @@ export default function App() {
   // Load registry on mount
   useEffect(() => {
     setLoading(true);
-    fetch('./posts/registry.json')
+    fetch(`./posts/registry.json?t=${Date.now()}`)
       .then(res => {
         if (!res.ok) throw new Error("Makale listesi yüklenemedi.");
         return res.json();
