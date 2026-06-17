@@ -205,6 +205,144 @@ export default function AdminEditor({ onBack, editData }) {
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
 
+  const [githubToken, setGithubToken] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('githubToken') || '';
+    }
+    return '';
+  });
+  const [tokenInput, setTokenInput] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishStatus, setPublishStatus] = useState('');
+
+  const handleSaveToken = () => {
+    if (!tokenInput.trim()) return;
+    localStorage.setItem('githubToken', tokenInput.trim());
+    setGithubToken(tokenInput.trim());
+    setTokenInput('');
+  };
+
+  const handleDeleteToken = () => {
+    if (window.confirm("GitHub erişim anahtarınızı silmek istediğinize emin misiniz?")) {
+      localStorage.removeItem('githubToken');
+      setGithubToken('');
+    }
+  };
+
+  const publishToGithub = async () => {
+    const token = localStorage.getItem('githubToken');
+    if (!token) {
+      alert("Lütfen önce GitHub Erişim Anahtarınızı (Token) girin.");
+      return;
+    }
+
+    setIsPublishing(true);
+    setPublishStatus("Yayınlama başlatılıyor...");
+
+    const owner = "LuneNoir14";
+    const repo = "Rotstead-Develop";
+    const branch = "main";
+    const headers = {
+      "Authorization": `token ${token}`,
+      "Content-Type": "application/json",
+    };
+
+    try {
+      setPublishStatus("Makale kütüphanesi (registry.json) indiriliyor...");
+      const registryUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/registry.json?ref=${branch}`;
+      const regRes = await fetch(registryUrl, { headers });
+      if (!regRes.ok) throw new Error("Makale kütüphanesi indirilemedi. Erişim anahtarınız hatalı veya yetersiz yetkilere sahip olabilir (repo yetkisi gerekli).");
+      const regData = await regRes.json();
+      
+      const decodedRegistryText = new TextDecoder("utf-8").decode(
+        Uint8Array.from(atob(regData.content.replace(/\s/g, '')), c => c.charCodeAt(0))
+      );
+      let registryArray = JSON.parse(decodedRegistryText);
+
+      const existingIndex = registryArray.findIndex(p => p.id === slug);
+      
+      const newPostItem = {
+        id: slug,
+        title: title || 'Başlıksız Makale',
+        category: category,
+        date: todayDate,
+        readTime: readTimeStr,
+        image: image,
+        excerpt: excerpt || 'Açıklama girilmedi.',
+        file: `${slug}.md`
+      };
+
+      if (existingIndex > -1) {
+        registryArray[existingIndex] = newPostItem;
+      } else {
+        registryArray.unshift(newPostItem);
+      }
+
+      const updatedRegistryText = JSON.stringify(registryArray, null, 2);
+      const encoder = new TextEncoder();
+      const registryBytes = encoder.encode(updatedRegistryText);
+      const registryBase64 = btoa(String.fromCharCode(...registryBytes));
+
+      setPublishStatus(`Makale metni (${slug}.md) yükleniyor...`);
+      const markdownUrl = `https://api.github.com/repos/${owner}/${repo}/contents/public/posts/${slug}.md`;
+      
+      let mdSha = null;
+      try {
+        const mdCheckRes = await fetch(`${markdownUrl}?ref=${branch}`, { headers });
+        if (mdCheckRes.ok) {
+          const mdCheckData = await mdCheckRes.json();
+          mdSha = mdCheckData.sha;
+        }
+      } catch (e) {
+        console.log("Markdown checking failed or file doesn't exist yet.");
+      }
+
+      const mdBytes = encoder.encode(content);
+      const mdBase64 = btoa(String.fromCharCode(...mdBytes));
+
+      const mdCommitRes = await fetch(markdownUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          message: `Publish post: ${title}`,
+          content: mdBase64,
+          branch,
+          ...(mdSha ? { sha: mdSha } : {})
+        })
+      });
+
+      if (!mdCommitRes.ok) throw new Error("Makale dosyası (.md) yüklenemedi.");
+
+      setPublishStatus("Kütüphane (registry.json) güncelleniyor...");
+      const regCommitRes = await fetch(registryUrl, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({
+          message: `Update registry for post: ${title}`,
+          content: registryBase64,
+          sha: regData.sha,
+          branch
+        })
+      });
+
+      if (!regCommitRes.ok) throw new Error("Kütüphane dosyası (registry.json) güncellenemedi.");
+
+      setPublishStatus("Yayınlama başarılı! Siteniz Render'da güncelleniyor (1-2 dakika sürebilir).");
+      alert("Yazı başarıyla yayınlandı! Siteniz Render'da güncellenmeye başlandı. 1-2 dakika içinde aktif olacaktır.");
+      
+      setTimeout(() => {
+        window.location.hash = '#/';
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      console.error(error);
+      alert(`Yayınlama sırasında hata oluştu: ${error.message}`);
+      setPublishStatus(`Hata: ${error.message}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   // Auto generate slug
   const getSlug = (text) => {
     return text
@@ -508,6 +646,62 @@ export default function AdminEditor({ onBack, editData }) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
             />
+          </div>
+
+          {/* Doğrudan Sitede Yayınla Panel */}
+          <div className="glass-card default-padding" style={{ border: '1px solid var(--accent-color)', backgroundColor: 'rgba(224, 122, 95, 0.03)' }}>
+            <h2>Doğrudan Sitede Yayınla (Önerilen)</h2>
+            <p style={{ fontSize: '0.88rem', color: 'var(--secondary-color)', marginTop: '0.2rem', marginBottom: '1rem' }}>
+              Herhangi bir dosya indirme veya GitHub Desktop işlemiyle uğraşmadan yazınızı doğrudan bu tarayıcı üzerinden yayına alabilirsiniz.
+            </p>
+
+            {!githubToken ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '30rem' }}>
+                <label htmlFor="github-token" style={{ fontWeight: '600', fontSize: '0.9rem' }}>GitHub Kişisel Erişim Anahtarı (Token)</label>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input 
+                    id="github-token"
+                    type="password" 
+                    className="search-input" 
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" 
+                    value={tokenInput}
+                    onChange={(e) => setTokenInput(e.target.value)}
+                  />
+                  <button className="button" onClick={handleSaveToken}>Kaydet</button>
+                </div>
+                <small style={{ color: 'var(--detail-color)', fontSize: '0.8rem' }}>
+                  Erişim anahtarınız sadece kendi tarayıcınızın hafızasında tutulur, tamamen güvenlidir. Nasıl alınacağını öğrenmek için <a href="https://github.com/settings/tokens" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent-color)', textDecoration: 'underline' }}>tıklayın</a> (Gerekli yetki: <code>repo</code>).
+                </small>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: 'var(--game-yellow)' }}></div>
+                    <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>GitHub Bağlantısı Hazır (LuneNoir14/Rotstead-Develop)</span>
+                  </div>
+                  <button className="button small-button" style={{ borderColor: 'var(--game-red)', color: 'var(--game-red)' }} onClick={handleDeleteToken}>
+                    Anahtarı Sil / Değiştir
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
+                  <button 
+                    className="button" 
+                    onClick={publishToGithub} 
+                    disabled={isPublishing || !title.trim() || !content.trim()}
+                    style={{ padding: '0.8rem 1.5rem', fontSize: '1rem', fontWeight: 'bold', backgroundColor: 'var(--accent-color)', color: 'white' }}
+                  >
+                    {isPublishing ? 'Yayınlanıyor...' : 'Yazıyı Yayınla (Push)'}
+                  </button>
+                  {publishStatus && (
+                    <span style={{ fontSize: '0.9rem', fontStyle: 'italic', color: 'var(--accent-color)' }}>
+                      {publishStatus}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Yayına Alma Kodu Üretici */}
