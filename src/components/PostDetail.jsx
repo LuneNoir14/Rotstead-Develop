@@ -160,6 +160,31 @@ function parseMarkdown(content) {
     else if (trimmed.startsWith('> ')) {
       elements.push(<blockquote key={i}>{parseInlineMarkdown(trimmed.slice(2))}</blockquote>);
     } 
+    // Image Gallery Row (2 or more images side-by-side)
+    else if (/^(!\[.*?\]\(.*?\)\s*){2,}$/.test(trimmed)) {
+      const imgRegex = /!\[(.*?)\]\((.*?)\)/g;
+      let imgMatch;
+      const imagesInRow = [];
+      let imgIdx = 0;
+      while ((imgMatch = imgRegex.exec(trimmed)) !== null) {
+        const alt = imgMatch[1];
+        const url = imgMatch[2];
+        const hasCaption = alt && alt.trim() && !/^img_\d+$/i.test(alt) && alt !== 'Görsel' && alt !== 'image';
+        imagesInRow.push(
+          <figure key={imgIdx++} className="post-gallery-figure">
+            <img src={url} alt={alt} />
+            {hasCaption && (
+              <figcaption className="post-gallery-caption">{alt}</figcaption>
+            )}
+          </figure>
+        );
+      }
+      elements.push(
+        <div key={i} className="post-image-gallery-row">
+          {imagesInRow}
+        </div>
+      );
+    }
     // Paragraph
     else {
       elements.push(<p key={i}>{parseInlineMarkdown(trimmed)}</p>);

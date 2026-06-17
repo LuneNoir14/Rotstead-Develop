@@ -739,6 +739,69 @@ nav .button {
   line-height: 1.4;
 }
 
+/* Gallery Row for side-by-side images */
+.post-image-gallery-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  align-items: stretch;
+  gap: 1rem;
+  margin: 1.8rem auto;
+  width: 100%;
+  max-width: 100%;
+}
+
+.post-gallery-figure {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  min-width: 0;
+}
+
+.post-gallery-figure img {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  transition: transform 0.2s ease-in-out;
+}
+
+.post-gallery-figure img:hover {
+  transform: scale(1.02);
+}
+
+.post-gallery-caption {
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
+  color: var(--detail-color);
+  font-style: italic;
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* Responsive side-by-side gallery */
+@media (max-width: 768px) {
+  .post-image-gallery-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+  }
+  
+  .post-gallery-figure {
+    width: 100%;
+    max-width: 450px;
+  }
+  
+  .post-gallery-figure img {
+    height: auto;
+    max-height: 350px;
+  }
+}
+
 /* Footer styling */
 footer {
   text-align: center;
