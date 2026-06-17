@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Gamepad2, Sun, Moon, Home, HelpCircle, PenLine } from 'lucide-react';
+import { Sun, Moon, Home, HelpCircle, PenLine } from 'lucide-react';
 
 const GithubIcon = ({ size = 16 }) => (
   <svg 
@@ -56,10 +56,8 @@ export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmi
     <header className="site-header glass-card">
       <div className="header-top">
         <a href="#" className="logo-container" onClick={handleHomeClick}>
-          <div className="logo-image" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'var(--accent-color)' }}>
-            <Gamepad2 size={28} color="#fff" />
-          </div>
-          <h1 className="site-title">Rotstead Devblog</h1>
+          <img className="logo-image" src="/rotsteadlogo.png" alt="Rotstead" />
+          <h1 className="site-title">Devblog</h1>
         </a>
         
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>

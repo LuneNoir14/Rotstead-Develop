@@ -412,21 +412,23 @@ h3 { font-size: 1.2rem; }
 .logo-container {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.75rem;
 }
 
 .logo-image {
-  width: 2.4rem;
-  height: 2.4rem;
-  border-radius: var(--border-radius);
-  border: 1px solid var(--border-color);
+  width: clamp(5.6rem, 18vw, 7.4rem);
+  height: auto;
+  display: block;
+  image-rendering: pixelated;
 }
 
 .site-title {
-  font-size: clamp(1.2rem, 4vw, 1.6rem);
+  font-size: clamp(1rem, 3vw, 1.25rem);
   text-decoration: none;
   color: var(--primary-color);
-  font-weight: 700;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .logo-container:hover .site-title {
@@ -488,7 +490,7 @@ nav .button {
 .post-content {
   display: flex;
   flex-direction: column;
-  gap: var(--primary-spacing);
+  gap: 0.95rem;
   font-size: 1.05rem;
 }
 
@@ -703,7 +705,7 @@ nav .button {
   max-height: 450px;
   object-fit: contain;
   display: block;
-  margin: 1.5rem auto;
+  margin: 0.6rem auto;
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
@@ -714,7 +716,7 @@ nav .button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin: 1.8rem auto;
+  margin: 0.9rem auto;
   max-width: min(100%, 650px);
 }
 
@@ -760,7 +762,7 @@ nav .button {
 }
 
 .post-inline-caption {
-  margin-top: 0.6rem;
+  margin-top: 0.45rem;
   font-size: 0.85rem;
   color: var(--detail-color);
   font-style: italic;
@@ -774,8 +776,8 @@ nav .button {
   flex-direction: row;
   justify-content: center;
   align-items: flex-start;
-  gap: 1rem;
-  margin: 1.8rem auto;
+  gap: 0.85rem;
+  margin: 0.9rem auto;
   width: 100%;
   max-width: 100%;
 }
@@ -805,7 +807,7 @@ nav .button {
 }
 
 .post-gallery-caption {
-  margin-top: 0.6rem;
+  margin-top: 0.45rem;
   font-size: 0.82rem;
   color: var(--detail-color);
   font-style: italic;

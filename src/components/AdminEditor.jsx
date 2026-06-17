@@ -129,6 +129,12 @@ function previewMarkdown(content) {
       elements.push(<h1 key={i}>{parseInlineMarkdown(trimmed.slice(2))}</h1>);
     } else if (trimmed.startsWith('> ')) {
       elements.push(<blockquote key={i}>{parseInlineMarkdown(trimmed.slice(2))}</blockquote>);
+    } else if (/^!\[.*?\]\(.*?\)$/.test(trimmed)) {
+      elements.push(
+        <React.Fragment key={i}>
+          {parseInlineMarkdown(trimmed)}
+        </React.Fragment>
+      );
     } else {
       elements.push(<p key={i}>{parseInlineMarkdown(trimmed)}</p>);
     }

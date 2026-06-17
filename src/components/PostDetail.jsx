@@ -185,6 +185,14 @@ function parseMarkdown(content) {
         </div>
       );
     }
+    // Single media line
+    else if (/^!\[.*?\]\(.*?\)$/.test(trimmed)) {
+      elements.push(
+        <React.Fragment key={i}>
+          {parseInlineMarkdown(trimmed)}
+        </React.Fragment>
+      );
+    }
     // Paragraph
     else {
       elements.push(<p key={i}>{parseInlineMarkdown(trimmed)}</p>);
