@@ -354,22 +354,22 @@ export default function AdminEditor({ onBack, editData }) {
     setContent(prev => prev.replace(new RegExp(`!\\[[^\\]]*\\]\\(embedded:${id}\\)`, 'g'), ''));
   };
   
-  const resolveEmbeddedImages = (text, videoUrlById = {}) => {
+  const resolveEmbeddedImages = (text, mediaUrlById = {}) => {
     return text.replace(/!\[([^\]]*)\]\(embedded:(img_\d+)\)/g, (fullMatch, alt, id) => {
-      if (videoUrlById[id]) return `![${alt || 'video'}](${videoUrlById[id]})`;
+      if (mediaUrlById[id]) return `![${alt || 'media'}](${mediaUrlById[id]})`;
       const img = embeddedImages.find(i => i.id === id);
       if (img) return `![${alt}](${img.data})`;
       return fullMatch;
     });
   };
 
-  const getEmbeddedVideoReferences = () => {
+  const getEmbeddedMediaReferences = () => {
     const refs = [];
     const seen = new Set();
     content.replace(/!\[([^\]]*)\]\(embedded:(img_\d+)\)/g, (fullMatch, alt, id) => {
       if (seen.has(id)) return fullMatch;
       const media = embeddedImages.find(i => i.id === id);
-      if (media && (media.type === 'video' || media.data.startsWith('data:video/'))) {
+      if (media) {
         refs.push({ ...media, alt });
         seen.add(id);
       }
@@ -539,19 +539,19 @@ export default function AdminEditor({ onBack, editData }) {
         console.log("Markdown checking failed or file doesn't exist yet.");
       }
 
-      const videoUrlById = {};
-      const embeddedVideos = getEmbeddedVideoReferences();
+      const mediaUrlById = {};
+      const embeddedMedia = getEmbeddedMediaReferences();
 
-      for (const media of embeddedVideos) {
+      for (const media of embeddedMedia) {
         const mediaBase64 = media.data.split(',')[1];
-        if (!mediaBase64) throw new Error(`${media.name} video verisi okunamadı.`);
+        if (!mediaBase64) throw new Error(`${media.name} medya verisi okunamadı.`);
 
         const mediaFileName = createSafeMediaFileName(media);
         const mediaPath = `public/media/${slug}/${mediaFileName}`;
         const mediaUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${mediaPath}`;
         const publicMediaUrl = `/media/${slug}/${mediaFileName}`;
 
-        setPublishStatus(`Video yükleniyor: ${media.name}`);
+        setPublishStatus(`Medya yükleniyor: ${media.name}`);
 
         let mediaSha = null;
         const mediaCheckRes = await fetch(`${mediaUrl}?ref=${branch}`, { headers });
@@ -559,7 +559,7 @@ export default function AdminEditor({ onBack, editData }) {
           const mediaCheckData = await mediaCheckRes.json();
           mediaSha = mediaCheckData.sha;
         } else if (mediaCheckRes.status !== 404) {
-          throw new Error(await getGitHubErrorMessage(mediaCheckRes, `${media.name} video durumu kontrol edilemedi.`));
+          throw new Error(await getGitHubErrorMessage(mediaCheckRes, `${media.name} medya durumu kontrol edilemedi.`));
         }
 
         const mediaCommitRes = await fetch(mediaUrl, {
@@ -574,15 +574,15 @@ export default function AdminEditor({ onBack, editData }) {
         });
 
         if (!mediaCommitRes.ok) {
-          throw new Error(await getGitHubErrorMessage(mediaCommitRes, `${media.name} video dosyası yüklenemedi.`));
+          throw new Error(await getGitHubErrorMessage(mediaCommitRes, `${media.name} medya dosyası yüklenemedi.`));
         }
 
-        videoUrlById[media.id] = publicMediaUrl;
+        mediaUrlById[media.id] = publicMediaUrl;
       }
 
-      const resolvedContent = resolveEmbeddedImages(content, videoUrlById);
-      if (resolvedContent.includes('data:video/')) {
-        throw new Error("Markdown içinde gömülü video verisi kaldı. Videoyu Medya Ekle panelinden yeniden ekleyin veya YouTube/direct video linki kullanın.");
+      const resolvedContent = resolveEmbeddedImages(content, mediaUrlById);
+      if (resolvedContent.includes('data:image/') || resolvedContent.includes('data:video/')) {
+        throw new Error("Markdown içinde gömülü medya verisi kaldı. Medyayı panelden yeniden ekleyin veya dış bağlantı kullanın.");
       }
       const mdBytes = encoder.encode(resolvedContent);
       const mdBase64 = uint8ArrayToBase64(mdBytes);
