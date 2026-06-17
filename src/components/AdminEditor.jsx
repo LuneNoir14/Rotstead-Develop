@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   PenTool, Eye, FileText, Check, Copy, 
-  Bold, Italic, Heading2, Heading3, Code, Quote, Table, Image as ImageIcon, Link as LinkIcon, 
+  Bold, Italic, Heading2, Heading3, Code, Quote, Table, Image as ImageIcon, Video, Link as LinkIcon, 
   Download, Upload, ArrowLeft, X, Trash2, Plus
 } from 'lucide-react';
 
@@ -155,18 +155,10 @@ function parseInlineMarkdown(text) {
     const tokenText = m.text;
     
     if (tokenText.startsWith('![') && tokenText.includes('](')) {
-      // Image tag
       const closeBracket = tokenText.indexOf(']');
       const altText = tokenText.slice(2, closeBracket);
-      const imageUrl = tokenText.slice(closeBracket + 2, -1);
-      tokens.push(
-        <img 
-          key={currentKey++} 
-          src={imageUrl} 
-          alt={altText} 
-          style={{ maxWidth: '100%', borderRadius: '4px', margin: '0.8rem 0', display: 'block', border: '1px solid var(--border-color)' }} 
-        />
-      );
+      const mediaUrl = tokenText.slice(closeBracket + 2, -1);
+      tokens.push(renderMarkdownMedia(altText, mediaUrl, currentKey++));
     } else if (tokenText.startsWith('**') && tokenText.endsWith('**')) {
       tokens.push(<strong key={currentKey++}>{tokenText.slice(2, -2)}</strong>);
     } else if (tokenText.startsWith('`') && tokenText.endsWith('`')) {
@@ -196,8 +188,70 @@ function uint8ArrayToBase64(bytes) {
   return window.btoa(binary);
 }
 
+function getYouTubeEmbedUrl(link) {
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = link.match(regExp);
+  return (match && match[2].length === 11) ? `https://www.youtube.com/embed/${match[2]}` : null;
+}
+
+function isVideoMedia(url, alt = '') {
+  const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+  return (
+    url.startsWith('data:video/') ||
+    cleanUrl.endsWith('.mp4') ||
+    cleanUrl.endsWith('.webm') ||
+    cleanUrl.endsWith('.ogg') ||
+    alt.toLowerCase() === 'video'
+  );
+}
+
+function getMediaAltForInsert(file) {
+  return file.type.startsWith('video/') ? 'video' : file.name;
+}
+
+function renderMarkdownMedia(altText, mediaUrl, key) {
+  const youtubeEmbedUrl = getYouTubeEmbedUrl(mediaUrl);
+  const isVideo = isVideoMedia(mediaUrl, altText);
+  const hasCaption = altText && altText.trim() && !/^img_\d+$/i.test(altText) && altText !== 'Görsel' && altText !== 'image' && altText !== 'video';
+
+  if (youtubeEmbedUrl) {
+    return (
+      <figure key={key} className="post-inline-figure" style={{ width: '100%', maxWidth: '650px' }}>
+        <div className="post-video-frame">
+          <iframe
+            src={youtubeEmbedUrl}
+            title={altText || 'YouTube Video'}
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+        {hasCaption && <figcaption className="post-inline-caption">{altText}</figcaption>}
+      </figure>
+    );
+  }
+
+  if (isVideo) {
+    return (
+      <figure key={key} className="post-inline-figure">
+        <video src={mediaUrl} controls preload="metadata" />
+        {hasCaption && <figcaption className="post-inline-caption">{altText}</figcaption>}
+      </figure>
+    );
+  }
+
+  return (
+    <img
+      key={key}
+      src={mediaUrl}
+      alt={altText}
+      style={{ maxWidth: '100%', borderRadius: '4px', margin: '0.8rem 0', display: 'block', border: '1px solid var(--border-color)' }}
+    />
+  );
+}
+
 export default function AdminEditor({ onBack, editData }) {
-  // Process initial content to extract any existing base64 images into embedded state
+  // Process initial content to extract any existing base64 media into embedded state
   const [initialProcessed] = useState(() => {
     const rawContent = editData?.content || '';
     if (!rawContent) return { content: '', images: [], nextId: 0 };
@@ -205,10 +259,11 @@ export default function AdminEditor({ onBack, editData }) {
     const images = [];
     let idx = 0;
     const newContent = rawContent.replace(
-      /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g,
+      /!\[([^\]]*)\]\((data:(?:image|video)\/[^)]+)\)/g,
       (fullMatch, alt, data) => {
         const id = `img_${idx}`;
-        images.push({ id, name: alt || `Görsel ${idx + 1}`, data });
+        const type = data.startsWith('data:video/') ? 'video' : 'image';
+        images.push({ id, name: alt || (type === 'video' ? `Video ${idx + 1}` : `Görsel ${idx + 1}`), data, type });
         idx++;
         return `![${alt}](embedded:${id})`;
       }
@@ -223,7 +278,7 @@ export default function AdminEditor({ onBack, editData }) {
   const [excerpt, setExcerpt] = useState(editData ? editData.excerpt : '');
   const [content, setContent] = useState(initialProcessed.content || (editData?.content || ''));
   
-  // Embedded images management
+  // Embedded media management
   const [embeddedImages, setEmbeddedImages] = useState(initialProcessed.images);
   const imageIdCounter = useRef(initialProcessed.nextId);
   
@@ -248,10 +303,10 @@ export default function AdminEditor({ onBack, editData }) {
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishStatus, setPublishStatus] = useState('');
 
-  // --- Embedded Image Management ---
-  const addEmbeddedImage = (name, base64Data) => {
+  // --- Embedded Media Management ---
+  const addEmbeddedImage = (name, base64Data, type = 'image') => {
     const id = `img_${imageIdCounter.current++}`;
-    setEmbeddedImages(prev => [...prev, { id, name, data: base64Data }]);
+    setEmbeddedImages(prev => [...prev, { id, name, data: base64Data, type }]);
     return id;
   };
   
@@ -294,7 +349,7 @@ export default function AdminEditor({ onBack, editData }) {
           reader.onload = (event) => {
             const base64Url = event.target?.result;
             if (base64Url) {
-              const id = addEmbeddedImage('Yapıştırılan Görsel', base64Url);
+              const id = addEmbeddedImage('Yapıştırılan Görsel', base64Url, 'image');
               insertFormatting(`![Yapıştırılan Görsel](embedded:${id})`);
             }
           };
@@ -310,13 +365,15 @@ export default function AdminEditor({ onBack, editData }) {
     const files = e.dataTransfer?.files;
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (file.type.indexOf("image") !== -1) {
+    if (file.type.startsWith("image/") || file.type.startsWith("video/")) {
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64Url = event.target?.result;
         if (base64Url) {
-          const id = addEmbeddedImage(file.name, base64Url);
-          insertFormatting(`![${file.name}](embedded:${id})`);
+          const type = file.type.startsWith("video/") ? 'video' : 'image';
+          const alt = getMediaAltForInsert(file);
+          const id = addEmbeddedImage(file.name, base64Url, type);
+          insertFormatting(`![${alt}](embedded:${id})`);
         }
       };
       reader.readAsDataURL(file);
@@ -544,17 +601,20 @@ export default function AdminEditor({ onBack, editData }) {
     }, 50);
   };
 
-  // Convert dragged local image to embedded reference (no more raw base64 in textarea)
+  // Convert local media to embedded reference (no more raw base64 in textarea)
   const handleImageFileChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64Url = event.target?.result;
       if (base64Url) {
-        const id = addEmbeddedImage(file.name, base64Url);
-        insertFormatting(`![${file.name}](embedded:${id})`);
+        const type = file.type.startsWith('video/') ? 'video' : 'image';
+        const alt = getMediaAltForInsert(file);
+        const id = addEmbeddedImage(file.name, base64Url, type);
+        insertFormatting(`![${alt}](embedded:${id})`);
         setShowImagePanel(false);
       }
     };
@@ -574,11 +634,13 @@ export default function AdminEditor({ onBack, editData }) {
     }
   };
 
-  // Add image via URL
+  // Add image/video via URL
   const handleAddImageUrl = (e) => {
     e.preventDefault();
-    if (!imageUrlInput) return;
-    insertFormatting(`![${imageAltInput || 'Görsel'}](${imageUrlInput})`);
+    const mediaUrl = imageUrlInput.trim();
+    if (!mediaUrl) return;
+    const defaultAlt = isVideoMedia(mediaUrl) || getYouTubeEmbedUrl(mediaUrl) ? 'video' : 'Görsel';
+    insertFormatting(`![${imageAltInput || defaultAlt}](${mediaUrl})`);
     setImageUrlInput('');
     setImageAltInput('');
     setShowImagePanel(false);
@@ -768,9 +830,10 @@ export default function AdminEditor({ onBack, editData }) {
                 <button type="button" className="button small-button" style={{ padding: '4px 8px' }} title="Tablo Ekle" onClick={() => insertFormatting('\n| Başlık 1 | Başlık 2 |\n| :--- | :--- |\n| Hücre 1 | Hücre 2 |\n')}>
                   <Table size={14} />
                 </button>
-                <button type="button" className="button small-button" style={{ padding: '4px 8px', color: 'var(--accent-color)' }} title="Görsel Ekle/Yükle" onClick={() => setShowImagePanel(!showImagePanel)}>
+                <button type="button" className="button small-button" style={{ padding: '4px 8px', color: 'var(--accent-color)' }} title="Medya Ekle/Yükle" onClick={() => setShowImagePanel(!showImagePanel)}>
                   <ImageIcon size={14} />
-                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Görsel Ekle</span>
+                  <Video size={14} />
+                  <span style={{ fontSize: '0.8rem', fontWeight: 'bold' }}>Medya Ekle</span>
                 </button>
               </div>
             </div>
@@ -778,7 +841,7 @@ export default function AdminEditor({ onBack, editData }) {
             {/* Expansible Image upload panel */}
             {showImagePanel && (
               <div className="glass-card" style={{ padding: '1rem', borderStyle: 'dashed', borderColor: 'var(--accent-color)', backgroundColor: 'rgba(224, 122, 95, 0.05)', marginTop: '0.5rem' }}>
-                <h4 style={{ marginBottom: '0.5rem' }}>Görsel Ekleme Paneli</h4>
+                <h4 style={{ marginBottom: '0.5rem' }}>Medya Ekleme Paneli</h4>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: '1rem' }}>
                   
                   {/* File Upload Zone */}
@@ -787,7 +850,7 @@ export default function AdminEditor({ onBack, editData }) {
                     <p style={{ fontSize: '0.85rem', fontWeight: '500', marginBottom: '0.5rem' }}>Bilgisayardan Sürükleyin veya Seçin</p>
                     <input 
                       type="file" 
-                      accept="image/*" 
+                      accept="image/*,video/*" 
                       style={{ display: 'none' }} 
                       ref={fileInputRef} 
                       onChange={handleImageFileChange}
@@ -796,19 +859,19 @@ export default function AdminEditor({ onBack, editData }) {
                       Dosya Seç
                     </button>
                     <small style={{ fontSize: '0.75rem', marginTop: '0.4rem', color: 'var(--detail-color)' }}>
-                      Görsel otomatik olarak yazıya gömülecektir.
+                      Görsel veya kısa video otomatik olarak yazıya gömülecektir.
                     </small>
                   </div>
 
                   {/* URL Input Form */}
                   <form onSubmit={handleAddImageUrl} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', justifyContent: 'center' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                      <label htmlFor="img-url" style={{ fontSize: '0.8rem', fontWeight: '600' }}>Görsel İnternet Linki (URL)</label>
+                      <label htmlFor="img-url" style={{ fontSize: '0.8rem', fontWeight: '600' }}>Medya İnternet Linki (URL)</label>
                       <input 
                         id="img-url"
                         type="text" 
                         className="search-input" 
-                        placeholder="https://images.unsplash.com/..." 
+                        placeholder="https://.../video.mp4 veya YouTube linki" 
                         style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem' }}
                         value={imageUrlInput}
                         onChange={(e) => setImageUrlInput(e.target.value)}
@@ -839,12 +902,16 @@ export default function AdminEditor({ onBack, editData }) {
                   <div style={{ marginTop: '1rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.8rem' }}>
                     <h4 style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
                       <ImageIcon size={14} style={{ marginRight: '0.3rem', verticalAlign: 'middle' }} />
-                      Gömülü Görseller ({embeddedImages.length})
+                      Gömülü Medyalar ({embeddedImages.length})
                     </h4>
                     <div className="embedded-images-gallery">
                       {embeddedImages.map((img) => (
                         <div key={img.id} className="embedded-image-item">
-                          <img src={img.data} alt={img.name} />
+                          {(img.type === 'video' || img.data.startsWith('data:video/')) ? (
+                            <video src={img.data} muted preload="metadata" />
+                          ) : (
+                            <img src={img.data} alt={img.name} />
+                          )}
                           <span style={{ fontSize: '0.72rem', color: 'var(--detail-color)', textAlign: 'center', lineHeight: '1.2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
                             {img.name}
                           </span>
@@ -853,14 +920,14 @@ export default function AdminEditor({ onBack, editData }) {
                               type="button" 
                               className="button small-button" 
                               title="Yazıya referans ekle"
-                              onClick={() => insertFormatting(`![${img.name}](embedded:${img.id})`)}
+                              onClick={() => insertFormatting(`![${(img.type === 'video' || img.data.startsWith('data:video/')) ? 'video' : img.name}](embedded:${img.id})`)}
                             >
                               <Plus size={10} />
                             </button>
                             <button 
                               type="button" 
                               className="button small-button delete-img-btn" 
-                              title="Görseli sil"
+                              title="Medyayı sil"
                               onClick={() => removeEmbeddedImage(img.id)}
                             >
                               <Trash2 size={10} />
@@ -882,14 +949,14 @@ export default function AdminEditor({ onBack, editData }) {
                 border: '1px solid var(--border-color)', fontSize: '0.82rem', color: 'var(--secondary-color)'
               }}>
                 <ImageIcon size={13} />
-                <span>{embeddedImages.length} gömülü görsel</span>
+                <span>{embeddedImages.length} gömülü medya</span>
                 <button 
                   type="button" 
                   className="button small-button" 
                   style={{ padding: '2px 8px', fontSize: '0.75rem', marginLeft: 'auto' }}
                   onClick={() => setShowImagePanel(true)}
                 >
-                  Görselleri Göster
+                  Medyaları Göster
                 </button>
               </div>
             )}
@@ -899,7 +966,7 @@ export default function AdminEditor({ onBack, editData }) {
               ref={textareaRef}
               className="search-input" 
               rows="15" 
-              placeholder="Yazı içeriğinizi buraya yazın... (Görselleri yapıştırabilir veya sürükleyebilirsiniz)" 
+              placeholder="Yazı içeriğinizi buraya yazın... (Görselleri yapıştırabilir; görsel/video dosyalarını sürükleyebilirsiniz)" 
               style={{ resize: 'vertical', minHeight: '18rem', fontFamily: 'monospace', marginTop: '0.5rem', overflowWrap: 'break-word', wordBreak: 'break-word' }}
               value={content}
               onChange={(e) => setContent(e.target.value)}

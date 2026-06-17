@@ -626,12 +626,14 @@ nav .button {
   width: 9rem;
 }
 
-.embedded-image-item img {
+.embedded-image-item img,
+.embedded-image-item video {
   width: 100%;
   height: 5.5rem;
   object-fit: cover;
   border-radius: var(--border-radius);
   border: 1px solid var(--border-color);
+  background-color: #000;
 }
 
 .embedded-image-actions {
@@ -689,7 +691,8 @@ nav .button {
     width: 7rem;
   }
   
-  .embedded-image-item img {
+  .embedded-image-item img,
+  .embedded-image-item video {
     height: 4rem;
   }
 }
@@ -724,6 +727,32 @@ nav .button {
   border: 1px solid var(--border-color);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
   transition: transform 0.2s ease-in-out;
+}
+
+.post-inline-figure video,
+.post-video-frame iframe {
+  width: 100%;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+  background-color: #000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.post-inline-figure video {
+  max-height: 450px;
+}
+
+.post-video-frame {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%;
+  height: 0;
+}
+
+.post-video-frame iframe {
+  position: absolute;
+  inset: 0;
+  height: 100%;
 }
 
 .post-inline-figure img:hover {

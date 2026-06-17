@@ -238,19 +238,19 @@ function parseInlineMarkdown(text) {
       };
 
       const youtubeEmbedUrl = getYouTubeEmbedUrl(url);
-      const isDirectVideo = url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ogg') || alt === 'video';
+      const cleanUrl = url.split('?')[0].split('#')[0].toLowerCase();
+      const isDirectVideo = url.startsWith('data:video/') || cleanUrl.endsWith('.mp4') || cleanUrl.endsWith('.webm') || cleanUrl.endsWith('.ogg') || alt.toLowerCase() === 'video';
 
       if (youtubeEmbedUrl) {
         tokens.push(
           <figure key={m.index} className="post-inline-figure" style={{ width: '100%', maxWidth: '650px' }}>
-            <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0 }}>
+            <div className="post-video-frame">
               <iframe
                 src={youtubeEmbedUrl}
                 title={alt || "YouTube Video"}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}
               />
             </div>
             {hasCaption && (
@@ -265,7 +265,6 @@ function parseInlineMarkdown(text) {
               src={url} 
               controls 
               preload="metadata" 
-              style={{ width: '100%', maxHeight: '450px', borderRadius: 'var(--border-radius)', border: '1px solid var(--border-color)' }}
             />
             {hasCaption && (
               <figcaption className="post-inline-caption">{alt !== 'video' ? alt : ''}</figcaption>
