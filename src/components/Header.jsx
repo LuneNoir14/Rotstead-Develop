@@ -101,7 +101,7 @@ export default function Header({ currentTab, setCurrentTab, resetFilters, isAdmi
           <li>
             <a href="#" className={`button small-button ${currentTab === 'about' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); setCurrentTab('about'); }}>
               <HelpCircle size={16} />
-              <span>Hakkımda & İletişim</span>
+              <span>Hakkımda</span>
             </a>
           </li>
           {isAdmin && (
